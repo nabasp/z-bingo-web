@@ -1,1 +1,102 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+
+/*
+ * Design tokens.
+ *
+ * These are the DARK values from the mobile app's Gluestack theme
+ * (`bingo/components/ui/gluestack-ui-provider/config.ts`), carried over
+ * verbatim as `R G B` triples. Keeping the same names means every Tailwind
+ * class ported out of a React Native screen — `bg-card`, `text-muted-foreground`,
+ * `border-border` — keeps its exact meaning here.
+ *
+ * The app is dark-only, matching the mobile app's hard-coded
+ * `<GluestackUIProvider mode="dark">`. The contrast ratios measured in
+ * `bingo/docs/accessibility.md` are all against this palette.
+ */
+@theme {
+  --color-background: rgb(10 10 10);
+  --color-foreground: rgb(250 250 250);
+
+  --color-card: rgb(23 23 23);
+  --color-card-foreground: rgb(250 250 250);
+
+  --color-popover: rgb(23 23 23);
+  --color-popover-foreground: rgb(250 250 250);
+
+  --color-primary: rgb(255 245 245);
+  --color-primary-foreground: rgb(23 23 23);
+
+  --color-secondary: rgb(38 38 38);
+  --color-secondary-foreground: rgb(250 250 250);
+
+  --color-muted: rgb(38 38 38);
+  --color-muted-foreground: rgb(161 161 161);
+
+  --color-accent: rgb(38 38 38);
+  --color-accent-foreground: rgb(250 250 250);
+
+  --color-destructive: rgb(255 100 103);
+
+  --color-border: rgb(46 46 46);
+  --color-input: rgb(46 46 46);
+  --color-ring: rgb(115 115 115);
+
+  /*
+   * The mobile Tailwind config points every family at `var(--font-sans)`,
+   * which nothing defines in a browser — leaving the whole app in Times.
+   * A real system stack is the web equivalent of the platform default.
+   */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-background);
+    color-scheme: dark;
+    /* iOS Safari zooms in when a font-size < 16px input is focused. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    /* The board and the recent-calls strip both scroll horizontally on their
+       own; the page itself never should. */
+    overflow-x: hidden;
+    min-height: 100dvh;
+  }
+
+  /*
+   * One visible focus treatment for everything, so keyboard users can always
+   * see where they are. `:focus-visible` keeps it off for mouse presses.
+   */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+    border-radius: 0.35rem;
+  }
+
+  /* A direct request from the player — see `useReduceMotion`. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
