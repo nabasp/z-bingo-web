@@ -1,0 +1,25 @@
+# Keep the build context small and, critically, prevent `COPY . .` from
+# clobbering the alpine node_modules that `npm ci` just installed with the
+# host's (wrong-platform) ones.
+node_modules
+dist
+dist-ssr
+
+.git
+.gitignore
+
+# Local secrets / config — never bake into the image. The .env.example is kept.
+.env
+.env.*
+!.env.example
+
+# Logs, editor, OS cruft
+*.log
+npm-debug.log*
+.vscode
+.idea
+.DS_Store
+
+# Docker files themselves
+Dockerfile
+.dockerignore
