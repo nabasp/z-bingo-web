@@ -69,6 +69,11 @@ export interface RoomSnapshot {
 export interface GameError {
   code: string;
   message: string;
+  /**
+   * Machine-readable extras. `already_in_room` carries `roomCode`, which is
+   * what lets the UI offer "rejoin that room" instead of a dead end.
+   */
+  details?: Record<string, string>;
 }
 
 export type Ack<T> =
@@ -87,6 +92,26 @@ export interface TurnChangedPayload {
 export interface WinnerDeclaredPayload {
   winnerId: string;
   results: PlayerResult[];
+}
+
+/** Why a room stopped existing. */
+export type RoomCloseReason =
+  | 'empty'
+  | 'no_players_joined'
+  | 'idle_timeout'
+  | 'server_shutdown';
+
+/**
+ * The room is gone, and why.
+ *
+ * Without this a closed room is indistinguishable from a dropped connection:
+ * the client simply stops hearing from a room it believes it is in. `message`
+ * is worded server-side so web and mobile say exactly the same thing.
+ */
+export interface RoomClosedPayload {
+  code: string;
+  reason: RoomCloseReason;
+  message: string;
 }
 
 export interface ClientToServerEvents {
@@ -110,6 +135,11 @@ export interface ClientToServerEvents {
 }
 
 export interface ServerToClientEvents {
+  /**
+   * Deprecated: the server now sends `game_state_updated` to every member
+   * instead, which is a strict superset. Still listened for so an older server
+   * keeps working.
+   */
   room_updated: (snapshot: RoomSnapshot) => void;
   game_state_updated: (snapshot: RoomSnapshot) => void;
   player_joined: (player: PublicPlayer) => void;
@@ -117,6 +147,8 @@ export interface ServerToClientEvents {
   game_started: (snapshot: RoomSnapshot) => void;
   turn_changed: (payload: TurnChangedPayload) => void;
   winner_declared: (payload: WinnerDeclaredPayload) => void;
+  /** This room has been closed; stop showing it and go home. */
+  room_closed: (payload: RoomClosedPayload) => void;
   error: (error: GameError) => void;
   session_superseded: () => void;
 }

@@ -2,6 +2,7 @@ import { createContext } from 'react';
 import type {
   GameError,
   PublicPlayer,
+  RoomClosedPayload,
   RoomSnapshot,
   WinnerDeclaredPayload,
 } from '../types/events';
@@ -24,12 +25,21 @@ export interface GameSocketValue {
   room: RoomSnapshot | null;
   /** Last server error, for inline display. Cleared by `clearError`. */
   error: GameError | null;
+  /**
+   * Why the last room ended, when it ended without the player choosing it.
+   *
+   * Separate from `error` because it outlives the screen it happened on: the
+   * room disappears, the guard sends the player home, and the explanation has
+   * to survive that navigation or they arrive with no idea what happened.
+   */
+  notice: RoomClosedPayload | null;
   winner: WinnerDeclaredPayload | null;
   /** This device's player within the room, if any. */
   me: PublicPlayer | null;
   isHost: boolean;
   isMyTurn: boolean;
   clearError: () => void;
+  clearNotice: () => void;
 
   createRoom: (
     size: number,

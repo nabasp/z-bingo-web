@@ -1,6 +1,7 @@
-import { PageHeading, PageShell, SectionLabel, TextLink } from '@/components/ui';
+import { Banner, PageHeading, PageShell, SectionLabel, TextLink } from '@/components/ui';
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
 import { useAuth } from '@/features/auth/context';
+import { useGameSocket } from '@/features/game/context';
 import { ActionCard, InviteCard, RecentGameTile } from '@/features/game/components';
 import { mockInvitations, mockRecentGames } from '@/features/game/mock';
 import { PATHS } from '../paths';
@@ -16,6 +17,9 @@ const SHOW_MOCK_DATA = false;
 
 export function HomePage() {
   const { user, logout } = useAuth();
+  // Home is where the route guard lands a player whose room ended without
+  // them, so it is where the explanation has to be shown.
+  const { notice, clearNotice } = useGameSocket();
   const invitation = SHOW_MOCK_DATA ? mockInvitations[0] : undefined;
   const recentGames = SHOW_MOCK_DATA ? mockRecentGames : [];
 
@@ -33,6 +37,12 @@ export function HomePage() {
         title={firstName ? `Welcome back, ${firstName}!` : 'Welcome back!'}
         subtitle="Ready to play?"
       />
+
+      {notice ? (
+        <Banner variant="info" onDismiss={clearNotice}>
+          {notice.message}
+        </Banner>
+      ) : null}
 
       <div className="flex w-full flex-col gap-4">
         <ActionCard

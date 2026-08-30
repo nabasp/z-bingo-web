@@ -11,7 +11,7 @@ import type {
   Player,
   PublicPlayer,
 } from '../types';
-import { CODE_ADJECTIVES, CODE_NOUNS, ROOM_CODE_PATTERN } from '../constants';
+import { ROOM_CODE_PATTERN } from '../constants';
 
 /**
  * Adapt a server player onto the presentation shape the UI components expect,
@@ -104,16 +104,16 @@ export function completedLines(cells: Cell[], size: number): LineDescriptor[] {
   );
 }
 
-function pick<T>(items: readonly T[]): T {
-  return items[Math.floor(Math.random() * items.length)];
-}
-
-/** Generate a memorable two-word room code, e.g. "brave-otter". */
-export function generateRoomCode(): string {
-  return `${pick(CODE_ADJECTIVES)}-${pick(CODE_NOUNS)}`;
-}
-
-/** Normalize typed input to the room-code charset (lowercase letters + hyphen). */
+/**
+ * Normalize typed input to the room-code charset (lowercase letters + hyphen).
+ *
+ * There is deliberately no client-side code *generator* to go with this. Codes
+ * are issued by the server, which is the only place that can guarantee one is
+ * unique among active rooms; a local copy of the word lists was dead code whose
+ * only real effect was the risk of silently drifting out of sync with the
+ * server's. Validation stays here because it is worth catching a typo before a
+ * round trip — but the server re-validates regardless.
+ */
 export function normalizeRoomCode(input: string): string {
   return input.toLowerCase().replace(/[^a-z-]/g, '');
 }

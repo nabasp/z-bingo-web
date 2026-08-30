@@ -25,13 +25,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createGameSocket, type GameSocket } from '@/lib/socketClient';
 import { useAuth } from '@/features/auth/context';
+import { GameRequestError } from './gameError';
 import {
   GameSocketContext,
   type GameSocketValue,
   type SocketStatus,
 } from './gameSocketContext';
-import { forgetRoom, recallRoom, rememberRoom } from './roomMemory';
-import type { GameError, RoomSnapshot, WinnerDeclaredPayload } from '../types/events';
+import type {
+  GameError,
+  RoomClosedPayload,
+  RoomSnapshot,
+  WinnerDeclaredPayload,
+} from '../types/events';
 
 
 
@@ -49,6 +54,7 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
   const [synced, setSynced] = useState(false);
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [error, setError] = useState<GameError | null>(null);
+  const [notice, setNotice] = useState<RoomClosedPayload | null>(null);
   const [winner, setWinner] = useState<WinnerDeclaredPayload | null>(null);
 
   useEffect(() => {
@@ -70,34 +76,23 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
     socket.on('connect', () => {
       setConnection('connected');
 
-      // Resume whatever room we were in. `synced` flips either way — "you are
-      // in no room" is just as much an answer as a snapshot, and callers must
-      // be able to tell both apart from "not asked yet".
-      const remembered = recallRoom();
-      if (remembered) {
-        // A fresh socket carries no server-side room, so `sync` alone would
-        // answer null even mid-match; `join_room` is the server's rejoin path
-        // and restores seat, board and turn. See `roomMemory.ts`.
-        socket.emit('join_room', { code: remembered }, res => {
-          if (res.ok) {
-            setRoom(res.data);
-          } else {
-            // The room was swept, ended, or we were removed. A rejoining player
-            // short-circuits every other check on the server, so a failure here
-            // genuinely means "you are not in that room" — drop the stale
-            // snapshot rather than leave the player staring at a dead board,
-            // and say why, since the route guard is about to send them home.
-            forgetRoom();
-            setRoom(null);
-            setError(res.error);
-          }
-          setSynced(true);
-        });
-        return;
-      }
-
+      /*
+       * Resume whatever room we were in.
+       *
+       * `sync` is now the whole story. The server resolves membership from the
+       * authenticated account rather than from per-socket state, so a reload or
+       * a reconnect — which always arrives on a brand new socket — finds the
+       * room on its own. This used to need a `sessionStorage` copy of the room
+       * code re-sent as a `join_room`; that workaround existed only because the
+       * server could not answer the question, and mobile, which had no such
+       * workaround, simply lost the game on every blip.
+       *
+       * `synced` flips either way: "you are in no room" is just as much an
+       * answer as a snapshot, and callers must tell both apart from "not asked".
+       */
       socket.emit('sync', res => {
         if (res.ok && res.data) setRoom(res.data);
+        else if (!res.ok) setError(res.error);
         setSynced(true);
       });
     });
@@ -106,7 +101,6 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
     socket.on('connect_error', () => setConnection('offline'));
 
     const applySnapshot = (snapshot: RoomSnapshot) => {
-      rememberRoom(snapshot.code);
       setRoom(previous => {
         // A public broadcast has no board; keep the one we already hold so a
         // room_updated never wipes the player's own board.
@@ -123,20 +117,42 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
     });
     socket.on('winner_declared', payload => setWinner(payload));
     socket.on('error', payload => setError(payload));
+
+    // The room ended without us asking. Keep the reason — the route guard is
+    // about to send us home, and the explanation has to arrive with us.
+    socket.on('room_closed', payload => {
+      setNotice(payload);
+      setRoom(null);
+      setWinner(null);
+    });
+
     socket.on('session_superseded', () => {
-      setError({
-        code: 'session_superseded',
-        message: 'You joined from another device.',
+      setNotice({
+        code: '',
+        reason: 'empty',
+        message: 'You joined from another device, so this tab left the game.',
       });
-      // The other session owns this room now; rejoining on reload would take
-      // the connection straight back off them.
-      forgetRoom();
       setRoom(null);
     });
 
     socket.connect();
 
+    /*
+     * Nudge the socket when the tab comes back.
+     *
+     * Browsers throttle timers in a backgrounded tab, so socket.io's reconnect
+     * backoff can be stretched to the point where a player who switches away
+     * mid-match returns to a still-disconnected socket and no obvious reason
+     * why. Reconnecting on the way back in makes the recovery immediate; the
+     * server's grace period is what keeps their seat during the gap.
+     */
+    const onVisible = () => {
+      if (!document.hidden && !socket.connected) socket.connect();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
+      document.removeEventListener('visibilitychange', onVisible);
       socket.removeAllListeners();
       socket.close();
       socketRef.current = null;
@@ -163,11 +179,11 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
         socket.emit('create_room', { size, maxPlayers, turnSeconds }, res => {
           if (res.ok) {
             setWinner(null);
-            rememberRoom(res.data.code);
+            setNotice(null);
             setRoom(res.data);
             resolve(res.data);
           } else {
-            reject(new Error(res.error.message));
+            reject(new GameRequestError(res.error));
           }
         });
       }),
@@ -180,11 +196,11 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
         socket.emit('join_room', { code }, res => {
           if (res.ok) {
             setWinner(null);
-            rememberRoom(res.data.code);
+            setNotice(null);
             setRoom(res.data);
             resolve(res.data);
           } else {
-            reject(new Error(res.error.message));
+            reject(new GameRequestError(res.error));
           }
         });
       }),
@@ -222,9 +238,10 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
 
   const leaveRoom = useCallback(() => {
     socketRef.current?.emit('leave_room');
-    forgetRoom();
     setRoom(null);
     setWinner(null);
+    // Leaving is deliberate, so there is nothing to explain on the way out.
+    setNotice(null);
   }, []);
 
   const me = useMemo(
@@ -238,11 +255,13 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       synced,
       room,
       error,
+      notice,
       winner,
       me,
       isHost: Boolean(room && user?.id && room.hostId === user.id),
       isMyTurn: Boolean(me && room && me.seat === room.currentTurnSeat),
       clearError: () => setError(null),
+      clearNotice: () => setNotice(null),
       createRoom,
       joinRoom,
       setReady,
@@ -259,6 +278,7 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       synced,
       room,
       error,
+      notice,
       winner,
       me,
       user?.id,

@@ -2,7 +2,12 @@ import { memo } from 'react';
 import { cn } from '@/lib/cn';
 
 export interface BannerProps {
-  variant: 'error' | 'success';
+  /**
+   * `info` and `success` render identically — both are the calm, muted
+   * treatment. They are distinct so the call site says what it means: a room
+   * closing because nobody joined is neither a failure nor an achievement.
+   */
+  variant: 'error' | 'success' | 'info';
   children: string;
   /** Adds a dismiss control. Omit for messages that clear themselves. */
   onDismiss?: () => void;
