@@ -52,6 +52,12 @@ export function HomePage() {
           to={PATHS.createRoom}
         />
         <ActionCard
+          title="Play with Friends"
+          subtitle="Invite friends to a game"
+          glyph="♦"
+          to={PATHS.playWithFriends}
+        />
+        <ActionCard
           title="Join Room"
           subtitle="Enter a room code"
           glyph="→"

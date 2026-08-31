@@ -27,7 +27,7 @@ const friend: Friend = {
 describe('FriendRow', () => {
   it('reads as one stop carrying handle and availability', () => {
     render(
-      <FriendRow friend={friend} seatIndex={0} onInvite={() => {}} onRemove={() => {}} />,
+      <FriendRow friend={friend} seatIndex={0} onRemove={() => {}} />,
     );
 
     const row = screen.getByRole('listitem');
@@ -38,22 +38,13 @@ describe('FriendRow', () => {
 
   it('does not read the visual content a second time', () => {
     render(
-      <FriendRow friend={friend} seatIndex={0} onInvite={() => {}} onRemove={() => {}} />,
+      <FriendRow friend={friend} seatIndex={0} onRemove={() => {}} />,
     );
     // The name/handle/badge block is hidden from assistive tech because the
     // row's own label already says all of it.
     expect(screen.getByText('@ann').closest('[aria-hidden="true"]')).not.toBeNull();
   });
 
-  it('names the person in every action label', () => {
-    render(
-      <FriendRow friend={friend} seatIndex={0} onInvite={() => {}} onRemove={() => {}} />,
-    );
-    expect(screen.getByRole('button', { name: 'Invite Ann Lee to your game' })).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: 'Remove Ann Lee from your friends' }),
-    ).toBeTruthy();
-  });
 
   it('states availability in words, not only colour', () => {
     render(
@@ -69,35 +60,8 @@ describe('FriendRow', () => {
     expect(screen.getByText('In a game')).toBeTruthy();
   });
 
-  it('explains why Invite is unavailable rather than leaving a dead control', () => {
-    render(
-      <FriendRow
-        friend={{ ...friend, presence: 'in_game' }}
-        seatIndex={0}
-        onInvite={() => {}}
-        onRemove={() => {}}
-      />,
-    );
-    const invite = screen.getByRole('button', { name: /Invite Ann Lee/ });
-    expect(invite).toBeDisabled();
-    expect(invite).toHaveAttribute('title', 'They are already in a game');
-  });
 
-  it('says an invitation is already outstanding', () => {
-    render(
-      <FriendRow friend={friend} seatIndex={0} onInvite={() => {}} onRemove={() => {}} invitePending />,
-    );
-    expect(screen.getByRole('listitem')).toHaveAccessibleName(
-      '@ann, Ann Lee. Online. Invitation sent',
-    );
-  });
 
-  it('disables Invite when the player has no room to invite into', () => {
-    render(<FriendRow friend={friend} seatIndex={0} onRemove={() => {}} />);
-    const invite = screen.getByRole('button', { name: /Invite Ann Lee/ });
-    expect(invite).toBeDisabled();
-    expect(invite).toHaveAttribute('title', 'Create or join a room first');
-  });
 });
 
 describe('RequestRow', () => {
@@ -198,10 +162,7 @@ describe('InviteDialog', () => {
   const invite: GameInvitePayload = {
     id: 'inv-1',
     from: { id: 'u-ann', handle: 'ann', name: 'Ann Lee' },
-    roomCode: 'brave-otter',
-    size: 5,
-    players: 1,
-    maxPlayers: 2,
+    targetPlayers: 3,
     expiresAt: Date.now() + 60_000,
   };
 
@@ -211,7 +172,7 @@ describe('InviteDialog', () => {
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveAccessibleName('Game invitation');
     expect(dialog).toHaveAccessibleDescription(
-      '@ann, Ann Lee invited you to a game. 5 by 5 board. 1 player of 2',
+      '@ann, Ann Lee invited you to a game. 3 players',
     );
   });
 

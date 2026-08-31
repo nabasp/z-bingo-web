@@ -40,17 +40,16 @@ function fire<E extends keyof ServerToClientEvents>(event: E, payload?: unknown)
 }
 
 function Probe() {
-  const { error, incomingInvite, outgoingInvite, friends, requests, sendInvite } =
-    useSocial();
+  const { error, incomingInvite, party, friends, requests, sendInvite } = useSocial();
   return (
     <div>
       <span data-testid="error">{error ?? 'none'}</span>
       <span data-testid="incoming">{incomingInvite?.id ?? 'none'}</span>
-      <span data-testid="outgoing">{outgoingInvite?.id ?? 'none'}</span>
+      <span data-testid="party">{party?.id ?? 'none'}</span>
       <span data-testid="friends">{friends.map(f => f.handle).join(',') || 'none'}</span>
       <span data-testid="requests">{requests.map(r => r.id).join(',') || 'none'}</span>
       {/* Sending is the only way to become the sender of record. */}
-      <button onClick={() => void sendInvite('u-cal')}>send</button>
+      <button onClick={() => void sendInvite('u-cal', 2)}>send</button>
     </div>
   );
 }
@@ -68,11 +67,18 @@ const text = (id: string) => screen.getByTestId(id).textContent;
 const invite = {
   id: 'inv-1',
   from: { id: 'u-ann', handle: 'ann', name: 'Ann Lee' },
-  roomCode: 'brave-otter',
-  size: 5,
-  players: 1,
-  maxPlayers: 2,
+  targetPlayers: 2,
   expiresAt: Date.now() + 60_000,
+};
+
+/** What `invite_send` acks with — the game now being assembled. */
+const party = {
+  id: 'p-1',
+  host: { id: 'u-me', handle: 'me', name: 'Me' },
+  targetPlayers: 2,
+  players: [{ id: 'u-me', handle: 'me', name: 'Me' }],
+  invited: [{ user: { id: 'u-cal', handle: 'cal', name: 'Cally' }, status: 'invited' }],
+  canStart: false,
 };
 
 beforeEach(() => {
@@ -104,17 +110,14 @@ describe('SocialProvider', () => {
     expect(text('error')).toBe('none');
   });
 
-  it('tells the sender when their invitation expires', async () => {
+  it('tells the host when an invitation they sent expires', async () => {
     renderProvider();
-    gameSocket.request.mockResolvedValueOnce({
-      id: 'inv-2',
-      expiresAt: Date.now() + 60_000,
-    } as never);
+    gameSocket.request.mockResolvedValueOnce(party as never);
 
     await act(async () => {
       screen.getByRole('button', { name: 'send' }).click();
     });
-    expect(text('outgoing')).toBe('inv-2');
+    expect(text('party')).toBe('p-1');
 
     fire('invite_ended', {
       id: 'inv-2',
@@ -122,18 +125,14 @@ describe('SocialProvider', () => {
       message: 'That invitation expired.',
     });
 
-    // The sender chose nothing and is waiting; without this they are left
-    // listening to silence wondering whether it worked.
-    expect(text('outgoing')).toBe('none');
+    // The host chose nothing and is waiting; without this they are left
+    // listening to silence wondering whether anyone answered.
     expect(text('error')).toBe('That invitation expired.');
   });
 
-  it('stays quiet with the sender when their invitation is accepted', async () => {
+  it('stays quiet with the host when an invitation is accepted', async () => {
     renderProvider();
-    gameSocket.request.mockResolvedValueOnce({
-      id: 'inv-3',
-      expiresAt: Date.now() + 60_000,
-    } as never);
+    gameSocket.request.mockResolvedValueOnce(party as never);
 
     await act(async () => {
       screen.getByRole('button', { name: 'send' }).click();
@@ -145,9 +144,21 @@ describe('SocialProvider', () => {
       message: 'The invitation was accepted.',
     });
 
-    // The room filling says this far better than a banner would.
-    expect(text('outgoing')).toBe('none');
+    // The game filling up says this far better than a banner would.
     expect(text('error')).toBe('none');
+  });
+
+  it('holds the game being assembled, and drops it when it ends', () => {
+    renderProvider();
+    fire('party_updated', party);
+    expect(text('party')).toBe('p-1');
+
+    fire('party_ended', {
+      id: 'p-1',
+      reason: 'cancelled',
+      message: 'The host cancelled the game.',
+    });
+    expect(text('party')).toBe('none');
   });
 
   it('removes a friend and any request when the other side drops you', () => {

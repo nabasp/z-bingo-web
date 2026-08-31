@@ -23,6 +23,7 @@
 /* eslint-disable react-hooks/refs, react-hooks/set-state-in-effect, react-hooks/preserve-manual-memoization */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { announcer } from '@/lib/a11y/Announcer';
 import { createGameSocket, type GameSocket } from '@/lib/socketClient';
 import { useAuth } from '@/features/auth/context';
 import { GameRequestError } from './gameError';
@@ -47,6 +48,29 @@ import type {
  * The client never derives game outcomes — every field here comes from the
  * server. Components read this state and emit intents; nothing more.
  */
+/**
+ * Rejections that are a normal part of using the board, not faults.
+ *
+ * Cells are deliberately never `disabled` (see `board.tsx`) so assistive tech
+ * can reach and activate them — which means tapping a cell while waiting for
+ * your turn is an ordinary, expected thing to do. Treating the first one as an
+ * error worth a red banner is disproportionate; the banner only earns its place
+ * once someone is clearly trying to play and wondering why nothing happens.
+ */
+const THROTTLED_ERRORS = new Set(['not_your_turn']);
+
+/** How many times in a row before a throttled rejection is worth showing. */
+const REPEATS_BEFORE_SHOWING = 3;
+
+/**
+ * How long any in-game error stays on screen.
+ *
+ * These are all momentary — "not your turn", "already called" — and describe a
+ * situation that has usually passed by the time you have read them. Left up,
+ * one mis-tap put a red banner on the board for the rest of the game.
+ */
+const ERROR_VISIBLE_MS = 4000;
+
 export function GameSocketProvider({ children }: { children: ReactNode }) {
   const { status: authStatus, user } = useAuth();
   const socketRef = useRef<GameSocket | null>(null);
@@ -67,6 +91,11 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
   const [synced, setSynced] = useState(false);
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [error, setError] = useState<GameError | null>(null);
+
+  /** Consecutive count of the same throttled rejection. */
+  const rejectionRef = useRef<{ code: string; count: number }>({ code: '', count: 0 });
+  /** The last snapshot, to spot the game actually moving on. */
+  const lastRoomRef = useRef<RoomSnapshot | null>(null);
   const [notice, setNotice] = useState<RoomClosedPayload | null>(null);
   const [winner, setWinner] = useState<WinnerDeclaredPayload | null>(null);
 
@@ -114,6 +143,27 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
     socket.on('connect_error', () => setConnection('offline'));
 
     const applySnapshot = (snapshot: RoomSnapshot) => {
+      /*
+       * A number was called, or the turn moved on.
+       *
+       * Either way whatever the player was being told off for no longer
+       * applies, so the message goes and the count starts again. This is what
+       * makes a successful attempt clear the banner: the server answers a good
+       * call with a new snapshot, never with an error.
+       */
+      const previousRoom = lastRoomRef.current;
+      const progressed =
+        !previousRoom ||
+        previousRoom.code !== snapshot.code ||
+        previousRoom.calledNumbers.length !== snapshot.calledNumbers.length ||
+        previousRoom.currentTurnSeat !== snapshot.currentTurnSeat;
+      lastRoomRef.current = snapshot;
+
+      if (progressed) {
+        rejectionRef.current = { code: '', count: 0 };
+        setError(null);
+      }
+
       setRoom(previous => {
         // A public broadcast has no board; keep the one we already hold so a
         // room_updated never wipes the player's own board.
@@ -129,7 +179,35 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       applySnapshot(snapshot);
     });
     socket.on('winner_declared', payload => setWinner(payload));
-    socket.on('error', payload => setError(payload));
+    socket.on('error', payload => {
+      if (!THROTTLED_ERRORS.has(payload.code)) {
+        rejectionRef.current = { code: '', count: 0 };
+        setError(payload);
+        return;
+      }
+
+      const count =
+        rejectionRef.current.code === payload.code
+          ? rejectionRef.current.count + 1
+          : 1;
+      rejectionRef.current = { code: payload.code, count };
+
+      /*
+       * Spoken every time, shown only after a few.
+       *
+       * Suppressing the banner must not mean suppressing the feedback: a
+       * player who cannot see the screen would otherwise tap a cell and get
+       * pure silence, which is exactly the failure the board avoids by never
+       * disabling its cells. The announcer's own deduplication keeps rapid
+       * taps down to one utterance rather than a stutter.
+       */
+      announcer.speak(payload.message, {
+        priority: 30,
+        dedupeKey: `rejected:${payload.code}`,
+      });
+
+      if (count >= REPEATS_BEFORE_SHOWING) setError(payload);
+    });
 
     // The room ended without us asking. Keep the reason — the route guard is
     // about to send us home, and the explanation has to arrive with us.
@@ -198,6 +276,15 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
     },
     [],
   );
+
+  // Errors describe a moment, not a state, so they clear themselves. Anything
+  // that must persist — a room closing, a handle refused — is a `notice` or a
+  // screen's own state instead.
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => setError(null), ERROR_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [error]);
 
   /** Emit an ack event as a promise, rejecting with the server's error. */
   const request = useCallback(

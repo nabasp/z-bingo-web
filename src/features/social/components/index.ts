@@ -1,6 +1,7 @@
 export * from './FriendRow';
 export * from './HandleEditor';
 export * from './InviteDialog';
+export * from './PartyPlayerRow';
 export * from './PresenceBadge';
 export * from './RequestRow';
 export * from './SearchField';

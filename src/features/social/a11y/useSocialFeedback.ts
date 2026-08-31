@@ -14,12 +14,12 @@ import { deriveSocialSpeechEvents, type SocialState } from './socialSpeechEvents
  * become one utterance rather than four that talk over each other.
  */
 export function useSocialFeedback(): void {
-  const { friends, requests, incomingInvite } = useSocial();
+  const { friends, requests, incomingInvite, party } = useSocial();
   const { pathname } = useLocation();
   const previous = useRef<SocialState | null>(null);
 
   useEffect(() => {
-    const next: SocialState = { friends, requests, incomingInvite };
+    const next: SocialState = { friends, requests, incomingInvite, party };
     const events = deriveSocialSpeechEvents(previous.current, next, {
       onFriendsScreen: pathname === PATHS.friends,
     });
@@ -32,5 +32,5 @@ export function useSocialFeedback(): void {
         dedupeKey: event.dedupeKey,
       });
     }
-  }, [friends, requests, incomingInvite, pathname]);
+  }, [friends, requests, incomingInvite, party, pathname]);
 }

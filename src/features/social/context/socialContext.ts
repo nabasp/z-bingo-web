@@ -3,15 +3,9 @@ import type {
   Friend,
   FriendRequest,
   GameInvitePayload,
+  PartySnapshot,
   PublicUser,
 } from '../types';
-
-/** How the last invitation this player sent is doing. */
-export interface OutgoingInvite {
-  id: string;
-  toUserId: string;
-  expiresAt: number;
-}
 
 export interface SocialValue {
   /** True until the first `friends_list` answers. */
@@ -23,8 +17,13 @@ export interface SocialValue {
   requests: FriendRequest[];
   /** The invitation currently being offered to this player, if any. */
   incomingInvite: GameInvitePayload | null;
-  /** The invitation this player last sent, while it is still live. */
-  outgoingInvite: OutgoingInvite | null;
+  /**
+   * The game being assembled that this player is part of — hosting or waiting
+   * in — before it becomes a room. Null when there is none.
+   */
+  party: PartySnapshot | null;
+  /** Why the last game being assembled ended, when it was not this player. */
+  partyNotice: string | null;
   /** Last failure, for inline display. */
   error: string | null;
   clearError: () => void;
@@ -36,10 +35,30 @@ export interface SocialValue {
   cancelRequest: (id: string) => Promise<void>;
   removeFriend: (userId: string) => Promise<void>;
   setHandle: (handle: string) => Promise<void>;
-  sendInvite: (userId: string) => Promise<void>;
-  /** Accepting resolves with the room code so the caller can navigate. */
-  respondToInvite: (id: string, accept: boolean) => Promise<string | null>;
+  /**
+   * Invite a friend into a game of `players`.
+   *
+   * The first call opens the game; later ones add to it. The count is fixed
+   * once anyone has been invited.
+   */
+  sendInvite: (userId: string, players: number) => Promise<void>;
+  /**
+   * Answer an invitation.
+   *
+   * Resolves with `joined` only when that acceptance filled the game — for a
+   * three-player game the first acceptor gets `waiting` and stays put until
+   * someone else completes it.
+   */
+  respondToInvite: (
+    id: string,
+    accept: boolean,
+  ) => Promise<'waiting' | 'joined' | 'declined' | 'failed'>;
   dismissInvite: () => void;
+  /** Start now with whoever has accepted. */
+  startParty: () => Promise<boolean>;
+  /** Abandon the game being assembled. */
+  cancelParty: () => Promise<void>;
+  clearPartyNotice: () => void;
 }
 
 /**

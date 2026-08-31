@@ -5,7 +5,12 @@ import {
   userLabel,
   type SocialState,
 } from './socialSpeechEvents';
-import type { Friend, FriendRequest, GameInvitePayload } from '../types';
+import type {
+  Friend,
+  FriendRequest,
+  GameInvitePayload,
+  PartySnapshot,
+} from '../types';
 
 /**
  * What the app says when the social state changes.
@@ -24,7 +29,13 @@ const ann: Friend = {
 const bob: Friend = { id: 'u-bob', handle: 'bob', name: 'Bob', presence: 'offline' };
 
 function state(overrides: Partial<SocialState> = {}): SocialState {
-  return { friends: [], requests: [], incomingInvite: null, ...overrides };
+  return {
+    friends: [],
+    requests: [],
+    incomingInvite: null,
+    party: null,
+    ...overrides,
+  };
 }
 
 const request: FriendRequest = {
@@ -37,10 +48,7 @@ const request: FriendRequest = {
 const invite: GameInvitePayload = {
   id: 'inv-1',
   from: { id: 'u-ann', handle: 'ann', name: 'Ann Lee' },
-  roomCode: 'brave-otter',
-  size: 5,
-  players: 1,
-  maxPlayers: 2,
+  targetPlayers: 3,
   expiresAt: Date.now() + 60_000,
 };
 
@@ -82,7 +90,7 @@ describe('deriveSocialSpeechEvents', () => {
     // game they were being offered.
     expect(events[0].assertive).toBe(true);
     expect(events[0].text).toContain('@ann');
-    expect(events[0].text).toContain('5 by 5');
+    expect(events[0].text).toContain('3 players');
   });
 
   it('announces an invitation even away from the friends screen', () => {
@@ -175,6 +183,49 @@ describe('deriveSocialSpeechEvents', () => {
   it('says nothing when a friend appears without a presence change', () => {
     const before = state({ friends: [ann] });
     expect(deriveSocialSpeechEvents(before, before, onScreen)).toEqual([]);
+  });
+
+  it('announces an acceptance and how close the game now is', () => {
+    const before: PartySnapshot = {
+      id: 'p1',
+      host: { id: 'u-me', handle: 'me', name: 'Me' },
+      targetPlayers: 3,
+      players: [{ id: 'u-me', handle: 'me', name: 'Me' }],
+      invited: [],
+      canStart: false,
+    };
+    const after: PartySnapshot = {
+      ...before,
+      players: [...before.players, { id: 'u-ann', handle: 'ann', name: 'Ann Lee' }],
+      canStart: true,
+    };
+
+    const events = deriveSocialSpeechEvents(
+      state({ party: before }),
+      state({ party: after }),
+      offScreen,
+    );
+
+    // A host waiting on friends needs to hear who said yes and how close it is
+    // — this is the only feedback they get.
+    expect(events).toHaveLength(1);
+    expect(events[0].text).toContain('@ann, Ann Lee accepted');
+    expect(events[0].text).toContain('2 of 3 players');
+    expect(events[0].text).toContain('You can start now');
+  });
+
+  it('says nothing about a game that has not changed', () => {
+    const party: PartySnapshot = {
+      id: 'p1',
+      host: { id: 'u-me', handle: 'me', name: 'Me' },
+      targetPlayers: 2,
+      players: [{ id: 'u-me', handle: 'me', name: 'Me' }],
+      invited: [],
+      canStart: false,
+    };
+    expect(
+      deriveSocialSpeechEvents(state({ party }), state({ party }), onScreen),
+    ).toEqual([]);
   });
 
   it('gives every event a dedupe key so repeats collapse', () => {

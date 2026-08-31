@@ -11,7 +11,13 @@
  */
 
 import { plural, sentence } from '@/lib/a11y/phrases';
-import type { Friend, FriendRequest, GameInvitePayload, Presence } from '../types';
+import type {
+  Friend,
+  FriendRequest,
+  GameInvitePayload,
+  PartySnapshot,
+  Presence,
+} from '../types';
 
 export interface SpeechEvent {
   text: string;
@@ -26,6 +32,8 @@ export interface SocialState {
   friends: Friend[];
   requests: FriendRequest[];
   incomingInvite: GameInvitePayload | null;
+  /** The game being assembled, if this player is in one. */
+  party: PartySnapshot | null;
 }
 
 export interface SpeechContext {
@@ -77,14 +85,37 @@ export function deriveSocialSpeechEvents(
     events.push({
       text: sentence(
         `${userLabel(invite.from)} invited you to a game`,
-        `${invite.size} by ${invite.size} board`,
-        `${plural(invite.players, 'player')} so far`,
+        `${plural(invite.targetPlayers, 'player')}`,
         'Open the invitation to accept or decline',
       ),
       priority: 90,
       assertive: true,
       dedupeKey: `invite:${invite.id}`,
     });
+  }
+
+  // ── The game being assembled filled up a little ───────────────────────────
+  // Only the arrivals are spoken. A host waiting on friends needs to hear that
+  // someone said yes and how close it now is, and nothing else about it.
+  if (next.party && prev.party?.id === next.party.id) {
+    const before = new Set(prev.party.players.map(player => player.id));
+    const joined = next.party.players.filter(player => !before.has(player.id));
+
+    if (joined.length > 0) {
+      events.push({
+        text: sentence(
+          joined.length === 1
+            ? `${userLabel(joined[0])} accepted`
+            : `${plural(joined.length, 'player')} accepted`,
+          `${next.party.players.length} of ${next.party.targetPlayers} players`,
+          next.party.canStart && next.party.players.length < next.party.targetPlayers
+            ? 'You can start now, or wait for more'
+            : undefined,
+        ),
+        priority: 55,
+        dedupeKey: `party:${next.party.id}:${next.party.players.length}`,
+      });
+    }
   }
 
   // ── Somebody asked to be friends ───────────────────────────────────────────

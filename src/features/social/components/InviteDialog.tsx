@@ -98,12 +98,7 @@ export function InviteDialog({
     return () => clearInterval(timer);
   }, [invite]);
 
-  const details = invite
-    ? sentence(
-        `${invite.size} by ${invite.size} board`,
-        `${plural(invite.players, 'player')} of ${invite.maxPlayers}`,
-      )
-    : '';
+  const details = invite ? `${plural(invite.targetPlayers, 'player')}` : '';
 
   return (
     <dialog

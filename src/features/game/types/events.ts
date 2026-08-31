@@ -129,6 +129,9 @@ export type Presence = 'online' | 'in_game' | 'offline';
 /** Why an invitation stopped being live. */
 export type InviteEndReason = 'expired' | 'declined' | 'accepted' | 'cancelled';
 
+/** Why a game being assembled stopped existing. */
+export type PartyEndReason = 'started' | 'cancelled' | 'host_left' | 'expired';
+
 /**
  * A player as another player sees them. Never carries an email — a handle is
  * how you refer to someone here, and the only identifier worth speaking.
@@ -161,16 +164,52 @@ export interface FriendsSnapshot {
   requests: FriendRequest[];
 }
 
-/** A live invitation, as shown to the invitee. */
+/**
+ * A live invitation, as shown to the invitee.
+ *
+ * There is no room yet — one is created once enough friends accept — so this
+ * describes the game being assembled: who is asking, and how many players for.
+ */
 export interface GameInvitePayload {
   id: string;
   from: PublicUser;
-  roomCode: string;
-  size: number;
-  players: number;
-  maxPlayers: number;
+  /** Total players the host wants, including themselves. */
+  targetPlayers: number;
   /** Epoch ms. Counted down against, rather than a local duration. */
   expiresAt: number;
+}
+
+/** How an invited friend is doing, from the host's point of view. */
+export type InviteeStatus = 'invited' | 'accepted' | 'declined' | 'expired';
+
+export interface PartyInvitee {
+  user: PublicUser;
+  status: InviteeStatus;
+}
+
+/** The game being assembled, as both the host and the acceptors see it. */
+export interface PartySnapshot {
+  id: string;
+  host: PublicUser;
+  targetPlayers: number;
+  /** The host plus everyone who has accepted, in order. */
+  players: PublicUser[];
+  invited: PartyInvitee[];
+  /** True once there are enough players for the host to start early. */
+  canStart: boolean;
+}
+
+export interface PartyEndedPayload {
+  id: string;
+  reason: PartyEndReason;
+  message: string;
+}
+
+/** What answering an invitation did. */
+export interface InviteAnswer {
+  status: 'waiting' | 'joined' | 'declined';
+  party?: PartySnapshot;
+  room?: RoomSnapshot;
 }
 
 /** An invitation stopped being live, and why. Sent to both parties. */
@@ -225,15 +264,23 @@ export interface ClientToServerEvents {
     payload: { handle: string },
     ack: (res: Ack<PublicUser>) => void,
   ) => void;
+  /**
+   * Invite a friend into the game you are assembling.
+   *
+   * `players` opens the game on the first call and is fixed from then on.
+   */
   invite_send: (
-    payload: { userId: string },
-    ack: (res: Ack<{ id: string; expiresAt: number }>) => void,
+    payload: { userId: string; players: number },
+    ack: (res: Ack<PartySnapshot>) => void,
   ) => void;
-  /** Accepting joins the room server-side and acks with the room itself. */
   invite_respond: (
     payload: { id: string; accept: boolean },
-    ack: (res: Ack<RoomSnapshot | null>) => void,
+    ack: (res: Ack<InviteAnswer>) => void,
   ) => void;
+  /** Start now with whoever has accepted, rather than waiting for the rest. */
+  party_start: (ack: (res: Ack<RoomSnapshot>) => void) => void;
+  /** Abandon the game being assembled. */
+  party_cancel: (ack: (res: Ack<null>) => void) => void;
 }
 
 export interface ServerToClientEvents {
@@ -267,4 +314,8 @@ export interface ServerToClientEvents {
   invite_received: (invite: GameInvitePayload) => void;
   /** Reaches both parties, so neither is left holding a dead invitation. */
   invite_ended: (payload: InviteEndedPayload) => void;
+  /** The game being assembled changed — someone accepted, declined or left. */
+  party_updated: (party: PartySnapshot) => void;
+  /** It is over. `started` means it became a room. */
+  party_ended: (payload: PartyEndedPayload) => void;
 }

@@ -8,6 +8,7 @@ import { SignInPage } from './auth/SignInPage';
 import { SignUpPage } from './auth/SignUpPage';
 import { FriendsPage } from './app/FriendsPage';
 import { HomePage } from './app/HomePage';
+import { PlayWithFriendsPage } from './app/PlayWithFriendsPage';
 import { ProfilePage } from './app/ProfilePage';
 import { SettingsPage } from './app/SettingsPage';
 import { BoardSetupPage } from './game/BoardSetupPage';
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
           { path: PATHS.profile, element: <ProfilePage /> },
           { path: PATHS.settings, element: <SettingsPage /> },
           { path: PATHS.friends, element: <FriendsPage /> },
+          { path: PATHS.playWithFriends, element: <PlayWithFriendsPage /> },
           {
             // Every game route shares the server-driven navigation.
             element: <GameLayout />,

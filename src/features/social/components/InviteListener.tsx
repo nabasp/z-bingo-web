@@ -25,11 +25,21 @@ export function InviteListener() {
     if (!incomingInvite) return;
     setBusy(true);
     try {
-      const code = await respondToInvite(incomingInvite.id, true);
-      // No code means the join was refused — the room filled, started or
-      // closed while the invitation sat there. The reason is already in the
-      // social error banner, so stay put rather than navigating nowhere.
-      if (code) navigate(PATHS.lobby);
+      const status = await respondToInvite(incomingInvite.id, true);
+
+      /*
+       * Accepting has two good outcomes, and they go to different places.
+       *
+       * `joined` means that acceptance filled the game and the room now
+       * exists, so the lobby is real. `waiting` means the seat is theirs but
+       * the game still needs someone — there is no room to show yet, so they
+       * go to the page that says who is in and how many are still needed.
+       * Sending a waiting player to the lobby would bounce them straight home
+       * off the room guard, which is exactly what it used to do.
+       */
+      if (status === 'joined') navigate(PATHS.lobby);
+      else if (status === 'waiting') navigate(PATHS.playWithFriends);
+      // `declined` and `failed` stay put — the reason is in the error banner.
     } finally {
       setBusy(false);
     }

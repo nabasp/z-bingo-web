@@ -16,13 +16,16 @@ import {
 } from 'react';
 import { GameRequestError, useGameSocket } from '@/features/game/context';
 import type { Ack } from '@/features/game/types/events';
-import { SocialContext, type OutgoingInvite, type SocialValue } from './socialContext';
+import { SocialContext, type SocialValue } from './socialContext';
 import type {
   Friend,
   FriendRequest,
   FriendsSnapshot,
   GameInvitePayload,
+  InviteAnswer,
+  PartySnapshot,
   PublicUser,
+  RoomSnapshot,
 } from '../types';
 
 /** Turn an ack into a promise settlement, preserving the server's error code. */
@@ -61,20 +64,22 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [incomingInvite, setIncomingInvite] = useState<GameInvitePayload | null>(null);
-  const [outgoingInvite, setOutgoingInvite] = useState<OutgoingInvite | null>(null);
+  const [party, setParty] = useState<PartySnapshot | null>(null);
+  const [partyNotice, setPartyNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * The invitation this player last sent.
+   * Whether this player is hosting the game being assembled.
    *
-   * A ref as well as state: the `invite_ended` listener is registered once, so
-   * reading the state variable there would see whatever was outstanding when
-   * the subscription was created, not now.
+   * Set when they send an invitation and cleared when the game ends, rather
+   * than derived from `party.host.id === me.id`: the profile arrives
+   * asynchronously, and a host whose profile had not landed yet would silently
+   * stop being told that their invitations were declined.
+   *
+   * A ref because the `invite_ended` listener is registered once — reading
+   * state there would see whatever was true when it was subscribed, not now.
    */
-  const outgoingRef = useRef<string | null>(null);
-  useEffect(() => {
-    outgoingRef.current = outgoingInvite?.id ?? null;
-  }, [outgoingInvite]);
+  const hostingRef = useRef(false);
 
   const applySnapshot = useCallback((snapshot: FriendsSnapshot) => {
     setMe(snapshot.me);
@@ -139,6 +144,15 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
     const offInvite = on('invite_received', invite => setIncomingInvite(invite));
 
+    const offParty = on('party_updated', snapshot => setParty(snapshot));
+
+    const offPartyEnded = on('party_ended', ({ reason, message: text }) => {
+      hostingRef.current = false;
+      setParty(null);
+      // `started` is not news — the room arriving says it better.
+      if (reason !== 'started') setPartyNotice(text);
+    });
+
     const offEnded = on('invite_ended', ({ id, reason, message: text }) => {
       /*
        * Both parties receive this, and they need different things from it.
@@ -150,10 +164,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
        * to silence wondering whether it worked. Acceptance is the exception:
        * the room fills and the game state says so far better than a banner.
        */
-      const wasSender = outgoingRef.current === id;
+      const wasHost = hostingRef.current;
       setIncomingInvite(previous => (previous?.id === id ? null : previous));
-      setOutgoingInvite(previous => (previous?.id === id ? null : previous));
-      if (wasSender && reason !== 'accepted') setError(text);
+      if (wasHost && reason !== 'accepted') setError(text);
     });
 
     return () => {
@@ -162,6 +175,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       offRemoved();
       offPresence();
       offInvite();
+      offParty();
+      offPartyEnded();
       offEnded();
     };
   }, [on]);
@@ -255,15 +270,15 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   );
 
   const sendInvite = useCallback(
-    async (userId: string) => {
+    async (userId: string, players: number) => {
       setError(null);
+      setPartyNotice(null);
       try {
-        const sent = await request<{ id: string; expiresAt: number }>(
-          (socket, resolve, reject) => {
-            socket.emit('invite_send', { userId }, settle(resolve, reject));
-          },
-        );
-        setOutgoingInvite({ id: sent.id, toUserId: userId, expiresAt: sent.expiresAt });
+        const snapshot = await request<PartySnapshot>((socket, resolve, reject) => {
+          socket.emit('invite_send', { userId, players }, settle(resolve, reject));
+        });
+        hostingRef.current = true;
+        setParty(snapshot);
       } catch (caught) {
         setError(message(caught, 'Could not send that invitation.'));
         throw caught;
@@ -273,24 +288,61 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   );
 
   const respondToInvite = useCallback(
-    async (id: string, accept: boolean): Promise<string | null> => {
+    async (id: string, accept: boolean) => {
       setError(null);
       try {
-        const room = await request<{ code: string } | null>((socket, resolve, reject) => {
+        const answer = await request<InviteAnswer>((socket, resolve, reject) => {
           socket.emit('invite_respond', { id, accept }, settle(resolve, reject));
         });
         setIncomingInvite(previous => (previous?.id === id ? null : previous));
-        return room?.code ?? null;
+        // Accepting a game that still needs players leaves us waiting in it,
+        // which is a state the UI has to show rather than a dead end.
+        if (answer.status === 'waiting' && answer.party) setParty(answer.party);
+        if (answer.status === 'joined') {
+          hostingRef.current = false;
+          setParty(null);
+        }
+        return answer.status;
       } catch (caught) {
         setError(message(caught, 'Could not answer that invitation.'));
         // The dialog closes either way: the reason is now in the error banner,
         // and leaving a dead invitation on screen helps nobody.
         setIncomingInvite(previous => (previous?.id === id ? null : previous));
-        return null;
+        return 'failed' as const;
       }
     },
     [request],
   );
+
+  const startParty = useCallback(async (): Promise<boolean> => {
+    setError(null);
+    try {
+      await request<RoomSnapshot>((socket, resolve, reject) => {
+        socket.emit('party_start', settle(resolve, reject));
+      });
+      hostingRef.current = false;
+      setParty(null);
+      return true;
+    } catch (caught) {
+      setError(message(caught, 'Could not start the game.'));
+      return false;
+    }
+  }, [request]);
+
+  const cancelParty = useCallback(async () => {
+    setError(null);
+    try {
+      await request<null>((socket, resolve, reject) => {
+        socket.emit('party_cancel', settle(resolve, reject));
+      });
+    } catch (caught) {
+      setError(message(caught, 'Could not cancel the game.'));
+    } finally {
+      // Either way this player is done with it.
+      hostingRef.current = false;
+      setParty(null);
+    }
+  }, [request]);
 
   const dismissInvite = useCallback(() => setIncomingInvite(null), []);
 
@@ -301,9 +353,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       friends,
       requests,
       incomingInvite,
-      outgoingInvite,
+      party,
+      partyNotice,
       error,
       clearError: () => setError(null),
+      clearPartyNotice: () => setPartyNotice(null),
       refresh,
       search,
       sendRequest,
@@ -314,6 +368,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       sendInvite,
       respondToInvite,
       dismissInvite,
+      startParty,
+      cancelParty,
     }),
     [
       loading,
@@ -321,7 +377,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       friends,
       requests,
       incomingInvite,
-      outgoingInvite,
+      party,
+      partyNotice,
       error,
       refresh,
       search,
@@ -333,6 +390,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       sendInvite,
       respondToInvite,
       dismissInvite,
+      startParty,
+      cancelParty,
     ],
   );
 

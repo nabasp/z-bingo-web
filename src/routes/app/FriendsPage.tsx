@@ -11,12 +11,12 @@ import {
 } from '@/components/ui';
 import { plural, sentence } from '@/lib/a11y/phrases';
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
-import { useGameSocket } from '@/features/game/context';
 import {
   FriendRow,
   RequestRow,
   SearchField,
   SearchResultRow,
+  sortFriends,
   useFriendSearch,
   useSocial,
 } from '@/features/social';
@@ -32,19 +32,16 @@ import { PATHS } from '../paths';
  */
 export function FriendsPage() {
   const navigate = useNavigate();
-  const { room } = useGameSocket();
   const {
     loading,
     me,
     friends,
     requests,
-    outgoingInvite,
     error,
     clearError,
     respondToRequest,
     cancelRequest,
     removeFriend,
-    sendInvite,
   } = useSocial();
   const { query, setQuery, results, searching, searched, relationOf, add, minLength } =
     useFriendSearch();
@@ -55,10 +52,6 @@ export function FriendsPage() {
   const incoming = requests.filter(r => r.direction === 'incoming');
   const outgoing = requests.filter(r => r.direction === 'outgoing');
 
-  // Only offer Invite when there is a room with a free seat to invite into.
-  const canInvite = Boolean(
-    room && room.status === 'lobby' && room.players.length < room.maxPlayers,
-  );
 
   const headingRef = useAnnounceOnFocus({
     title: 'Friends',
@@ -68,9 +61,8 @@ export function FriendsPage() {
       incoming.length > 0
         ? `${plural(incoming.length, 'friend request')} waiting`
         : undefined,
-      canInvite ? 'You can invite friends to your room' : undefined,
     ),
-    key: `${friends.length}:${incoming.length}:${canInvite}`,
+    key: `${friends.length}:${incoming.length}`,
   });
 
   const confirmRemove = useCallback(async () => {
@@ -97,11 +89,6 @@ export function FriendsPage() {
         </Banner>
       ) : null}
 
-      {!canInvite ? (
-        <Banner variant="info">
-          Create or join a room, then come back here to invite friends into it.
-        </Banner>
-      ) : null}
 
       {loading ? (
         <Spinner size="lg" label="Loading your friends" className="text-primary" />
@@ -133,17 +120,11 @@ export function FriendsPage() {
               </p>
             ) : (
               <div role="list" className="flex w-full flex-col gap-3">
-                {friends.map((friend, index) => (
+                {sortFriends(friends).map((friend, index) => (
                   <FriendRow
                     key={friend.id}
                     friend={friend}
                     seatIndex={index}
-                    invitePending={outgoingInvite?.toUserId === friend.id}
-                    onInvite={
-                      canInvite
-                        ? () => void sendInvite(friend.id).catch(() => undefined)
-                        : undefined
-                    }
                     onRemove={() => setRemoving({ id: friend.id, name: friend.name })}
                   />
                 ))}
