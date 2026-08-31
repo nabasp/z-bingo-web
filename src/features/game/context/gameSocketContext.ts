@@ -1,9 +1,11 @@
 import { createContext } from 'react';
+import type { GameSocket } from '@/lib/socketClient';
 import type {
   GameError,
   PublicPlayer,
   RoomClosedPayload,
   RoomSnapshot,
+  ServerToClientEvents,
   WinnerDeclaredPayload,
 } from '../types/events';
 
@@ -40,6 +42,36 @@ export interface GameSocketValue {
   isMyTurn: boolean;
   clearError: () => void;
   clearNotice: () => void;
+
+  /**
+   * Subscribe to a server event on the shared socket.
+   *
+   * This is the seam the social feature uses. It exists so friends, presence
+   * and invitations ride the ONE authenticated connection this provider owns,
+   * rather than opening a second one — and so each subscriber gets an
+   * unsubscribe back, which is what keeps listeners from accumulating across
+   * reconnects. Registrations survive the socket being replaced (sign-out,
+   * reconnect): they are re-attached to whatever socket is current.
+   */
+  on<E extends keyof ServerToClientEvents>(
+    event: E,
+    handler: ServerToClientEvents[E],
+  ): () => void;
+
+  /**
+   * Send an ack-style event and get the reply as a promise.
+   *
+   * Rejects with a `GameRequestError` carrying the server's code and details.
+   * The callback receives the typed socket, so every event name and payload is
+   * checked against the wire contract.
+   */
+  request<T>(
+    run: (
+      socket: GameSocket,
+      resolve: (value: T) => void,
+      reject: (error: Error) => void,
+    ) => void,
+  ): Promise<T>;
 
   createRoom: (
     size: number,

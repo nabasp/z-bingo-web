@@ -6,6 +6,7 @@ import { PATHS } from './paths';
 import { ForgotPasswordPage } from './auth/ForgotPasswordPage';
 import { SignInPage } from './auth/SignInPage';
 import { SignUpPage } from './auth/SignUpPage';
+import { FriendsPage } from './app/FriendsPage';
 import { HomePage } from './app/HomePage';
 import { ProfilePage } from './app/ProfilePage';
 import { SettingsPage } from './app/SettingsPage';
@@ -49,6 +50,7 @@ export const router = createBrowserRouter([
           { path: PATHS.home, element: <HomePage /> },
           { path: PATHS.profile, element: <ProfilePage /> },
           { path: PATHS.settings, element: <SettingsPage /> },
+          { path: PATHS.friends, element: <FriendsPage /> },
           {
             // Every game route shares the server-driven navigation.
             element: <GameLayout />,

@@ -38,7 +38,7 @@ const missing = REQUIRED.filter(key => !raw[key]?.trim());
 if (missing.length > 0) {
   throw new Error(
     `Missing required environment variables: ${missing.join(', ')}. ` +
-      'Copy .env.example to .env and fill it in.',
+      'They are supplied by the z-bingo-deployment stack; see its DEPLOYMENT.md.',
   );
 }
 

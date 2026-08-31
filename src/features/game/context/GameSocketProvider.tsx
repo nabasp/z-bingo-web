@@ -35,6 +35,7 @@ import type {
   GameError,
   RoomClosedPayload,
   RoomSnapshot,
+  ServerToClientEvents,
   WinnerDeclaredPayload,
 } from '../types/events';
 
@@ -49,6 +50,18 @@ import type {
 export function GameSocketProvider({ children }: { children: ReactNode }) {
   const { status: authStatus, user } = useAuth();
   const socketRef = useRef<GameSocket | null>(null);
+
+  /**
+   * Subscriptions registered through `on`, kept outside the socket.
+   *
+   * The socket is torn down and rebuilt whenever auth changes, so a listener
+   * attached directly to one instance would silently stop firing. Holding the
+   * registrations here lets them be re-attached to each new socket, and lets
+   * every `on` hand back an unsubscribe that works either way.
+   */
+  const externalListeners = useRef(
+    new Map<string, Set<(...args: unknown[]) => void>>(),
+  );
 
   const [connection, setConnection] = useState<SocketStatus>('idle');
   const [synced, setSynced] = useState(false);
@@ -135,6 +148,12 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       setRoom(null);
     });
 
+    // Re-attach anything registered through `on` before the socket opens, so a
+    // subscriber never misses the first event after a reconnect.
+    for (const [event, handlers] of externalListeners.current) {
+      for (const handler of handlers) socket.on(event as never, handler as never);
+    }
+
     socket.connect();
 
     /*
@@ -158,6 +177,27 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       socketRef.current = null;
     };
   }, [authStatus]);
+
+  const on = useCallback(
+    <E extends keyof ServerToClientEvents>(
+      event: E,
+      handler: ServerToClientEvents[E],
+    ): (() => void) => {
+      const key = event as string;
+      const fn = handler as unknown as (...args: unknown[]) => void;
+
+      const handlers = externalListeners.current.get(key) ?? new Set();
+      handlers.add(fn);
+      externalListeners.current.set(key, handlers);
+      socketRef.current?.on(event as never, fn as never);
+
+      return () => {
+        externalListeners.current.get(key)?.delete(fn);
+        socketRef.current?.off(event as never, fn as never);
+      };
+    },
+    [],
+  );
 
   /** Emit an ack event as a promise, rejecting with the server's error. */
   const request = useCallback(
@@ -262,6 +302,8 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       isMyTurn: Boolean(me && room && me.seat === room.currentTurnSeat),
       clearError: () => setError(null),
       clearNotice: () => setNotice(null),
+      on,
+      request,
       createRoom,
       joinRoom,
       setReady,
@@ -282,6 +324,8 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       winner,
       me,
       user?.id,
+      on,
+      request,
       createRoom,
       joinRoom,
       setReady,

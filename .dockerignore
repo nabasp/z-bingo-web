@@ -8,10 +8,9 @@ dist-ssr
 .git
 .gitignore
 
-# Local secrets / config — never bake into the image. The .env.example is kept.
+# Local secrets / config — never bake into the image.
 .env
 .env.*
-!.env.example
 
 # Logs, editor, OS cruft
 *.log

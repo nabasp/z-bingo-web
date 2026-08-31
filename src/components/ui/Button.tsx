@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { cn } from '@/lib/cn';
 import { Spinner } from './Spinner';
 
@@ -14,6 +14,14 @@ export interface ButtonProps
   loading?: boolean;
   fullWidth?: boolean;
   className?: string;
+  /**
+   * Forwarded to the underlying `<button>`.
+   *
+   * Needed for focus management — moving focus into a dialog on open, or onto
+   * a sensible neighbour after a row is removed. React 19 treats `ref` as an
+   * ordinary prop on function components, so no `forwardRef` is involved.
+   */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 const VARIANTS: Record<ButtonVariant, string> = {

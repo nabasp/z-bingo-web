@@ -2,15 +2,15 @@ import { Banner, PageHeading, PageShell, SectionLabel, TextLink } from '@/compon
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
 import { useAuth } from '@/features/auth/context';
 import { useGameSocket } from '@/features/game/context';
-import { ActionCard, InviteCard, RecentGameTile } from '@/features/game/components';
-import { mockInvitations, mockRecentGames } from '@/features/game/mock';
+import { ActionCard, RecentGameTile } from '@/features/game/components';
+import { mockRecentGames } from '@/features/game/mock';
 import { PATHS } from '../paths';
 
 /**
- * Invitations and match history have no backend yet.
+ * Match history has no backend yet.
  *
- * Flipping this on renders the mock fixtures for design work; off, the sections
- * show honest empty states instead of presenting invented data as real. Same
+ * Flipping this on renders the mock fixtures for design work; off, the section
+ * shows an honest empty state instead of presenting invented data as real. Same
  * switch, same default as the mobile `HomeScreen`.
  */
 const SHOW_MOCK_DATA = false;
@@ -20,7 +20,6 @@ export function HomePage() {
   // Home is where the route guard lands a player whose room ended without
   // them, so it is where the explanation has to be shown.
   const { notice, clearNotice } = useGameSocket();
-  const invitation = SHOW_MOCK_DATA ? mockInvitations[0] : undefined;
   const recentGames = SHOW_MOCK_DATA ? mockRecentGames : [];
 
   const headingRef = useAnnounceOnFocus({
@@ -59,22 +58,6 @@ export function HomePage() {
           to={PATHS.joinRoom}
         />
       </div>
-
-      {invitation ? (
-        <section className="flex w-full flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <SectionLabel>Invitations</SectionLabel>
-            <span className="rounded-xl bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
-              1
-            </span>
-          </div>
-          <InviteCard
-            invitation={invitation}
-            variant="compact"
-            onJoin={() => undefined}
-          />
-        </section>
-      ) : null}
 
       <section className="flex w-full flex-col gap-3">
         <SectionLabel>Recent Games</SectionLabel>

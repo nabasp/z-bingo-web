@@ -44,16 +44,6 @@ export interface Cell {
   marked: boolean;
 }
 
-export interface Invitation {
-  id: string;
-  fromName: string;
-  roomLabel: string;
-  roomCode: string;
-  boardSize: BoardSize;
-  players: number;
-  timeAgo: string;
-}
-
 export interface RecentGame {
   id: string;
   outcome: 'won' | 'lost';

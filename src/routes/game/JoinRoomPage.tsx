@@ -2,15 +2,8 @@ import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Banner, Button, PageShell, SectionLabel } from '@/components/ui';
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
-import {
-  GameScreenHeader,
-  InviteCard,
-  RoomCodeInput,
-} from '@/features/game/components';
+import { GameScreenHeader, RoomCodeInput } from '@/features/game/components';
 import { useJoinRoom } from '@/features/game/hooks';
-
-/** Invitations have no backend yet; same switch as the Home page. */
-const SHOW_MOCK_DATA = false;
 
 export function JoinRoomPage() {
   const [searchParams] = useSearchParams();
@@ -18,8 +11,6 @@ export function JoinRoomPage() {
     code,
     setCode,
     isValid,
-    invitations,
-    declineInvitation,
     submit,
     isSubmitting,
     errorMessage,
@@ -65,19 +56,6 @@ export function JoinRoomPage() {
         </Button>
       </form>
 
-      {SHOW_MOCK_DATA && invitations.length > 0 ? (
-        <section className="flex w-full flex-col gap-3">
-          <SectionLabel>Pending Invitations</SectionLabel>
-          {invitations.map(invitation => (
-            <InviteCard
-              key={invitation.id}
-              invitation={invitation}
-              onJoin={() => join(invitation.roomCode)}
-              onDecline={() => declineInvitation(invitation.id)}
-            />
-          ))}
-        </section>
-      ) : null}
     </PageShell>
   );
 }

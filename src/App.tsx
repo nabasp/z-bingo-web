@@ -8,6 +8,7 @@ import {
 import { AuthProvider } from '@/features/auth/context';
 import { GameFeedbackBridge } from '@/features/game/a11y';
 import { GameSocketProvider } from '@/features/game/context';
+import { SocialProvider } from '@/features/social';
 import { router } from '@/routes/router';
 
 /**
@@ -45,9 +46,17 @@ export default function App() {
     <AuthProvider>
       {/* Socket connects once authenticated; owns all live room state. */}
       <GameSocketProvider>
-        {/* Turns room-snapshot changes into sound, speech and haptics. */}
-        <GameFeedbackBridge />
-        <RouterProvider router={router} />
+        {/* Friends, presence and invitations, on that same socket. */}
+        <SocialProvider>
+          {/* Turns room-snapshot changes into sound, speech and haptics. */}
+          <GameFeedbackBridge />
+          {/*
+            `SocialFeedbackBridge` is NOT here: it reads the current route to
+            decide whether presence changes are worth announcing, so it has to
+            sit inside the router. It is mounted in `AppLayout` instead.
+          */}
+          <RouterProvider router={router} />
+        </SocialProvider>
       </GameSocketProvider>
     </AuthProvider>
   );

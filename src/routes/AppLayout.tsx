@@ -3,10 +3,13 @@ import { cn } from '@/lib/cn';
 import { AppLogo } from '@/components/ui';
 import { useAuth } from '@/features/auth/context';
 import { PlayerAvatar } from '@/features/game/components';
+import { SocialFeedbackBridge } from '@/features/social';
+import { InviteListener } from '@/features/social/components/InviteListener';
 import { PATHS } from './paths';
 
 const NAV_ITEMS = [
   { to: PATHS.home, label: 'Home' },
+  { to: PATHS.friends, label: 'Friends' },
   { to: PATHS.profile, label: 'Profile' },
 ];
 
@@ -73,6 +76,15 @@ export function AppLayout() {
       <main id="main" className="flex flex-1 flex-col">
         <Outlet />
       </main>
+
+      {/*
+        Both are mounted for every authenticated route, and both need to be
+        inside the router: the bridge reads the current route to decide whether
+        a presence change is worth announcing, and accepting an invitation
+        navigates into the lobby.
+      */}
+      <SocialFeedbackBridge />
+      <InviteListener />
     </div>
   );
 }

@@ -26,4 +26,3 @@ dist-ssr
 # Local environment (contains project-specific config)
 .env
 .env.*
-!.env.example

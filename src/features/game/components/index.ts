@@ -5,7 +5,6 @@ export * from './ConnectionBanner';
 export * from './EmptyPlayerSlot';
 export * from './game';
 export * from './GameScreenHeader';
-export * from './InviteCard';
 export * from './LiveTurnBanner';
 export * from './OptionSelector';
 export * from './PlayerAvatar';

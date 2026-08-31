@@ -16,6 +16,7 @@ export const PATHS = {
   home: '/',
   profile: '/profile',
   settings: '/settings',
+  friends: '/friends',
 
   // Game flow. The server's room status decides which of these you are on —
   // see `useGameFlowNavigation`.

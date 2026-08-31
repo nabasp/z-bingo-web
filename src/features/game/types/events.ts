@@ -114,6 +114,72 @@ export interface RoomClosedPayload {
   message: string;
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Social — friends, presence and game invitations.
+//
+// These ride the SAME socket as the game events above; the server registers
+// their handlers on the one shared connection. Kept in this file because it is
+// the mirror of the server's single `socket.types.ts`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Whether a friend can be invited right now. */
+export type Presence = 'online' | 'in_game' | 'offline';
+
+/** Why an invitation stopped being live. */
+export type InviteEndReason = 'expired' | 'declined' | 'accepted' | 'cancelled';
+
+/**
+ * A player as another player sees them. Never carries an email — a handle is
+ * how you refer to someone here, and the only identifier worth speaking.
+ */
+export interface PublicUser {
+  id: string;
+  /** Unique, e.g. "alex". Displayed and spoken with a leading "@". */
+  handle: string;
+  name: string;
+  avatarUrl?: string;
+}
+
+export interface Friend extends PublicUser {
+  presence: Presence;
+}
+
+/** A pending friendship, from the perspective of whoever is being told. */
+export interface FriendRequest {
+  /** The friendship's id — also what respond and cancel take. */
+  id: string;
+  user: PublicUser;
+  direction: 'incoming' | 'outgoing';
+  createdAt: number;
+}
+
+/** Everything the Friends screen needs, in one round trip. */
+export interface FriendsSnapshot {
+  me: PublicUser;
+  friends: Friend[];
+  requests: FriendRequest[];
+}
+
+/** A live invitation, as shown to the invitee. */
+export interface GameInvitePayload {
+  id: string;
+  from: PublicUser;
+  roomCode: string;
+  size: number;
+  players: number;
+  maxPlayers: number;
+  /** Epoch ms. Counted down against, rather than a local duration. */
+  expiresAt: number;
+}
+
+/** An invitation stopped being live, and why. Sent to both parties. */
+export interface InviteEndedPayload {
+  id: string;
+  reason: InviteEndReason;
+  message: string;
+}
+
 export interface ClientToServerEvents {
   create_room: (
     payload: { size: number; maxPlayers: number; turnSeconds: number },
@@ -132,6 +198,42 @@ export interface ClientToServerEvents {
   call_number: (payload: { number: number }) => void;
   rematch: (payload: { size?: number }) => void;
   leave_room: () => void;
+
+  // ── Social ────────────────────────────────────────────────────────────────
+  friends_list: (ack: (res: Ack<FriendsSnapshot>) => void) => void;
+  friend_search: (
+    payload: { query: string },
+    ack: (res: Ack<{ results: PublicUser[] }>) => void,
+  ) => void;
+  friend_request: (
+    payload: { userId: string },
+    ack: (res: Ack<FriendsSnapshot>) => void,
+  ) => void;
+  friend_respond: (
+    payload: { id: string; accept: boolean },
+    ack: (res: Ack<FriendsSnapshot>) => void,
+  ) => void;
+  friend_cancel: (
+    payload: { id: string },
+    ack: (res: Ack<FriendsSnapshot>) => void,
+  ) => void;
+  friend_remove: (
+    payload: { userId: string },
+    ack: (res: Ack<FriendsSnapshot>) => void,
+  ) => void;
+  set_handle: (
+    payload: { handle: string },
+    ack: (res: Ack<PublicUser>) => void,
+  ) => void;
+  invite_send: (
+    payload: { userId: string },
+    ack: (res: Ack<{ id: string; expiresAt: number }>) => void,
+  ) => void;
+  /** Accepting joins the room server-side and acks with the room itself. */
+  invite_respond: (
+    payload: { id: string; accept: boolean },
+    ack: (res: Ack<RoomSnapshot | null>) => void,
+  ) => void;
 }
 
 export interface ServerToClientEvents {
@@ -151,4 +253,18 @@ export interface ServerToClientEvents {
   room_closed: (payload: RoomClosedPayload) => void;
   error: (error: GameError) => void;
   session_superseded: () => void;
+
+  // ── Social ────────────────────────────────────────────────────────────────
+  friend_request_received: (request: FriendRequest) => void;
+  friend_request_resolved: (payload: {
+    id: string;
+    accepted: boolean;
+    user: PublicUser;
+  }) => void;
+  friend_removed: (payload: { userId: string }) => void;
+  /** One friend's availability changed. Only their friends receive this. */
+  friend_presence: (payload: { userId: string; presence: Presence }) => void;
+  invite_received: (invite: GameInvitePayload) => void;
+  /** Reaches both parties, so neither is left holding a dead invitation. */
+  invite_ended: (payload: InviteEndedPayload) => void;
 }
