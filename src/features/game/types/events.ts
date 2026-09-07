@@ -219,6 +219,24 @@ export interface InviteEndedPayload {
   message: string;
 }
 
+/**
+ * What a client needs to join its room's audio.
+ *
+ * `url` travels with the token rather than being compiled into each client, so
+ * the LiveKit address lives in one place on the server: changing it needs no
+ * web image rebuild and no mobile release.
+ *
+ * `room` is opaque and deliberately *not* the room code — codes are recycled,
+ * so the audio room carries a nonce.
+ */
+export interface VoiceCredentials {
+  url: string;
+  token: string;
+  room: string;
+  /** Epoch ms. Past this the client re-requests rather than reconnecting. */
+  expiresAt: number;
+}
+
 export interface ClientToServerEvents {
   create_room: (
     payload: { size: number; maxPlayers: number; turnSeconds: number },
@@ -237,6 +255,16 @@ export interface ClientToServerEvents {
   call_number: (payload: { number: number }) => void;
   rematch: (payload: { size?: number }) => void;
   leave_room: () => void;
+
+  // ── Voice ────────────────────────────────────────────────────────────────
+  /**
+   * Credentials for this room's audio.
+   *
+   * Acked, and on the socket for the same reason the social calls are: it is
+   * already authenticated and already knows which room you are in, so there is
+   * no membership argument for a caller to forge.
+   */
+  voice_token: (ack: (res: Ack<VoiceCredentials>) => void) => void;
 
   // ── Social ────────────────────────────────────────────────────────────────
   friends_list: (ack: (res: Ack<FriendsSnapshot>) => void) => void;

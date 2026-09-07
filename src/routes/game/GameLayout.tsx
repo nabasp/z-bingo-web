@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { useGameFlowNavigation } from '@/features/game/hooks';
+import { VoiceProvider } from '@/features/voice';
 
 /**
  * Wraps every `/game/*` route and mounts the server-driven navigation once.
@@ -9,8 +10,17 @@ import { useGameFlowNavigation } from '@/features/game/hooks';
  * layout does, so hoisting it here means the rule is stated once and applies
  * everywhere in the flow — including on Create and Join, where it is what moves
  * you into the lobby as soon as the server confirms the room.
+ *
+ * It is also where voice chat lives, for the same reason: this component
+ * unmounts the moment the player leaves the game flow, which is exactly when
+ * their audio connection should end. Mounting it any higher — beside
+ * GameSocketProvider in App — would leave the call running after the game.
  */
 export function GameLayout() {
   useGameFlowNavigation();
-  return <Outlet />;
+  return (
+    <VoiceProvider>
+      <Outlet />
+    </VoiceProvider>
+  );
 }

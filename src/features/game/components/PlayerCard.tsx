@@ -38,7 +38,7 @@ export const PlayerCard = memo(function PlayerCard({ player, seatIndex }: Player
             </span>
             {player.isHost ? <HostBadge /> : null}
           </span>
-          <StatusBadge connection={player.connection} voice={player.voice} />
+          <StatusBadge connection={player.connection} playerId={player.id} />
         </div>
       </div>
       <span aria-hidden="true">

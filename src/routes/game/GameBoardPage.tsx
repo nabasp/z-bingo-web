@@ -16,6 +16,7 @@ import {
   RecentNumbers,
 } from '@/features/game/components';
 import { useGameSocket } from '@/features/game/context';
+import { VoiceBanner, VoiceButton } from '@/features/voice';
 import { useGame } from '@/features/game/hooks';
 import type { Cell } from '@/features/game/types';
 import { PATHS } from '../paths';
@@ -102,6 +103,7 @@ export function GameBoardPage() {
       </h1>
 
       <ConnectionBanner status={connection} />
+      <VoiceBanner />
 
       {/* Owns the one-second timer, so the tick never reaches the board. */}
       <LiveTurnBanner
@@ -159,16 +161,7 @@ export function GameBoardPage() {
               onClick={() => setConfirmingExit(true)}>
               Exit
             </Button>
-            {/* Voice chat is a later phase. Showing it disabled is honest; a
-                button that silently does nothing is not. */}
-            <Button
-              variant="outline"
-              size="md"
-              className="flex-1"
-              disabled
-              title="Voice chat is not available yet">
-              Voice
-            </Button>
+            <VoiceButton className="flex-1" />
             <Button variant="outline" size="md" className="flex-1" onClick={toggleSfx}>
               {sfxOn ? 'Sound On' : 'Sound Off'}
             </Button>

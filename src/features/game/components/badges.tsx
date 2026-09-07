@@ -1,6 +1,7 @@
 import { memo } from 'react';
+import { useMicState } from '@/features/voice/hooks';
 import { cn } from '@/lib/cn';
-import type { ConnectionStatus, ReadyStatus, VoiceStatus } from '../types';
+import type { ConnectionStatus, ReadyStatus } from '../types';
 
 /** Amber "HOST" pill. */
 export const HostBadge = memo(function HostBadge() {
@@ -31,14 +32,24 @@ const CONNECTION_LABEL: Record<ConnectionStatus, string> = {
   disconnected: 'Offline',
 };
 
-/** Small text status (connection or voice), used under a player's name. */
+/**
+ * Small text status (connection and microphone), used under a player's name.
+ *
+ * Takes a `playerId` and reads the microphone itself rather than receiving it
+ * as a prop. That keeps the subscription at the leaf: when somebody mutes,
+ * this one text node re-renders and the surrounding `PlayerCard` — and the
+ * board behind it — do not.
+ *
+ * Both halves are words. Nothing here is conveyed by colour.
+ */
 export const StatusBadge = memo(function StatusBadge({
   connection,
-  voice,
+  playerId,
 }: {
   connection: ConnectionStatus;
-  voice: VoiceStatus;
+  playerId: string;
 }) {
+  const voice = useMicState(playerId);
   return (
     <span className="text-xs text-muted-foreground">
       {CONNECTION_LABEL[connection]} · {voice === 'mic-on' ? 'Mic On' : 'Mic Off'}

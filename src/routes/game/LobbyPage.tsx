@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Banner, Button, PageShell } from '@/components/ui';
 import { spokenRoomCode } from '@/lib/a11y/phrases';
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
+import { VoiceBanner, VoiceButton } from '@/features/voice';
 import {
   ConnectionBanner,
   GameScreenHeader,
@@ -55,6 +56,7 @@ export function LobbyPage() {
       <GameScreenHeader title="Game Lobby" showBack={false} headingRef={headingRef} />
 
       <ConnectionBanner status={connection} />
+      <VoiceBanner />
 
       {error ? (
         <Banner variant="error" onDismiss={clearError}>
@@ -106,6 +108,9 @@ export function LobbyPage() {
                 {allReady ? 'Start Game' : 'Waiting for players…'}
               </Button>
             ) : null}
+            {/* Audio starts in the lobby: this is where players sort out who
+                is playing, which is exactly when talking is most useful. */}
+            <VoiceButton className="w-full" />
             <Button variant="outline" fullWidth onClick={leave}>
               Leave Room
             </Button>
