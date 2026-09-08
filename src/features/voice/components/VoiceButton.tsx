@@ -1,29 +1,7 @@
 import { Button } from '@/components/ui';
 import { announcer, sentence } from '@/lib/a11y';
 import { useVoice } from '../context/useVoice';
-import type { VoiceConnection } from '../context/voiceContext';
-
-/**
- * What the button says in each state.
- *
- * The state is always carried in *words*, never by colour alone — the same
- * rule the connection and ready badges follow, and the reason a screen-reader
- * user and a sighted user learn the same thing from this control.
- */
-const LABEL: Record<VoiceConnection, string> = {
-  off: 'Voice Off',
-  connecting: 'Voice Connecting',
-  live: 'Mic On',
-  reconnecting: 'Voice Reconnecting',
-  denied: 'Mic Blocked',
-  unavailable: 'Voice Unavailable',
-};
-
-/** Said when the button is pressed but cannot do what it normally does. */
-const WHY: Partial<Record<VoiceConnection, string>> = {
-  connecting: 'Voice chat is still connecting.',
-  reconnecting: 'Voice chat is reconnecting. Please wait.',
-};
+import { VOICE_LABEL, VOICE_WHY } from '../voiceLabels';
 
 /**
  * Mute toggle for the room's voice chat.
@@ -39,14 +17,14 @@ export function VoiceButton({ className }: { className?: string }) {
   const { connection, micOn, toggleMic, retry } = useVoice();
 
   const live = connection === 'live';
-  const label = live ? (micOn ? 'Mic On' : 'Mic Off') : LABEL[connection];
+  const label = live ? (micOn ? 'Mic On' : 'Mic Off') : VOICE_LABEL[connection];
 
   const press = () => {
     if (live) {
       toggleMic();
       return;
     }
-    const why = WHY[connection];
+    const why = VOICE_WHY[connection];
     if (why) {
       announcer.speak(why, { assertive: true, dedupeKey: 'voice-status' });
       return;
@@ -68,7 +46,7 @@ export function VoiceButton({ className }: { className?: string }) {
       aria-label={
         live
           ? sentence(micOn ? 'Mic on' : 'Mic off', 'Voice chat', micOn ? 'Mute' : 'Unmute')
-          : sentence(LABEL[connection], 'Activate to try again')
+          : sentence(VOICE_LABEL[connection], 'Activate to try again')
       }>
       {label}
     </Button>

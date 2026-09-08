@@ -1,4 +1,13 @@
-import { Banner, Button, PageHeading, PageShell } from '@/components/ui';
+import { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Banner,
+  Button,
+  ConfirmDialog,
+  PageHeading,
+  PageShell,
+} from '@/components/ui';
+import { SHORTCUTS } from '@/lib/a11y/shortcuts';
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
 import {
   BingoHeaderRow,
@@ -6,8 +15,10 @@ import {
   ConnectionBanner,
 } from '@/features/game/components';
 import { useGameSocket } from '@/features/game/context';
-import { useBoardSetup } from '@/features/game/hooks';
+import { useBoardFocusShortcut, useBoardSetup } from '@/features/game/hooks';
+import { BOARD_GRID_ID } from '@/features/game/constants';
 import type { BoardSize } from '@/features/game/types';
+import { PATHS } from '../paths';
 
 /**
  * Described to every editable cell.
@@ -19,15 +30,44 @@ import type { BoardSize } from '@/features/game/types';
 const CELL_HINT =
   'Press Enter to pick this cell, then Enter on another to swap them.';
 
+/**
+ * Read out on arrival, and shown to browse-mode users just above the board.
+ *
+ * A module constant so the two copies cannot drift and `detail` keeps a stable
+ * identity — the hook re-parks focus whenever it changes.
+ *
+ * No Escape here: this page has no confirmed exit, and wiring it to an
+ * unconfirmed one would be worse than leaving the key alone.
+ */
+const KEYBOARD_HELP =
+  `Use Random Fill, then swap cells to taste, then choose Continue. ` +
+  `Move between cells with the arrow keys. ` +
+  `Press ${SHORTCUTS.focusBoard.spoken} to jump to the board and back, ` +
+  `${SHORTCUTS.toggleMic.spoken} to mute or unmute.`;
+
 export function BoardSetupPage() {
-  const { room, error, connection } = useGameSocket();
+  const { room, error, connection, leaveRoom } = useGameSocket();
+  const navigate = useNavigate();
   const size = (room?.size ?? 5) as BoardSize;
+  // The word this board spells — BUS at 3×3, GAME at 4×4, BINGO at 5×5, and so
+  // on. Chosen by the server, so every client shows the same one.
+  const word = room?.word ?? '';
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+
+  const leave = useCallback(() => {
+    setConfirmingLeave(false);
+    leaveRoom();
+    navigate(PATHS.home, { replace: true });
+  }, [leaveRoom, navigate]);
 
   const headingRef = useAnnounceOnFocus({
     title: 'Set up your board',
-    detail: `A ${size} by ${size} board. Use Random Fill, then swap cells to taste, then choose Continue. Move between cells with the arrow keys.`,
+    detail: `A ${size} by ${size} board. ${KEYBOARD_HELP}`,
     key: String(size),
   });
+
+  // Alt+B jumps into the board and back out to wherever the player was.
+  useBoardFocusShortcut({ gridId: BOARD_GRID_ID, fallbackRef: headingRef });
 
   const {
     cells,
@@ -60,8 +100,12 @@ export function BoardSetupPage() {
         is what actually matters here.
       */}
       <div className="mx-auto flex w-full max-w-[min(32rem,60vh)] flex-col gap-1">
-        <BingoHeaderRow size={size} />
+        {/* For browse-mode readers arrowing down to the board. */}
+        <p className="sr-only">{KEYBOARD_HELP}</p>
+
+        <BingoHeaderRow word={word} />
         <BoardGrid
+          id={BOARD_GRID_ID}
           label={`Your board, ${size} by ${size}`}
           cells={cells}
           size={size}
@@ -90,6 +134,17 @@ export function BoardSetupPage() {
           {submitted ? 'Board Locked' : 'Continue'}
         </Button>
 
+        {/* There was no way out of this screen before: a player who changed
+            their mind while laying out a board had to close the app. Confirmed,
+            because leaving ends the game for everyone waiting on them. */}
+        <Button
+          variant="outline"
+          fullWidth
+          className="text-rose-400"
+          onClick={() => setConfirmingLeave(true)}>
+          Leave Room
+        </Button>
+
         <p role="status" aria-live="polite" className="text-center text-sm text-muted-foreground">
           {submitted
             ? 'Board locked in. Waiting for the other players.'
@@ -106,6 +161,15 @@ export function BoardSetupPage() {
           </p>
         ) : null}
       </div>
+      <ConfirmDialog
+        open={confirmingLeave}
+        title="Leave the room?"
+        message="The other players will be left waiting, and the game cannot start without you."
+        confirmLabel="Leave room"
+        destructive
+        onConfirm={leave}
+        onCancel={() => setConfirmingLeave(false)}
+      />
     </PageShell>
   );
 }

@@ -1,4 +1,5 @@
 import { PageHeading, PageShell, SettingToggle } from '@/components/ui';
+import { SHORTCUTS } from '@/lib/a11y/shortcuts';
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
 import {
   areHapticsSupported,
@@ -79,6 +80,33 @@ export function SettingsPage() {
               : 'This browser or device has no vibration support.'
           }
         />
+      </section>
+
+      <section className="flex w-full flex-col gap-4">
+        <PageHeading level={2} title="Keyboard shortcuts" />
+
+        {/* Rendered from the same table the shortcuts are bound from, so this
+            list cannot describe behaviour the app does not have. A definition
+            list, because that is what this is: a key and what it does. */}
+        <dl className="flex w-full flex-col gap-3">
+          {Object.entries(SHORTCUTS).map(([name, shortcut]) => (
+            <div key={name} className="flex items-baseline justify-between gap-4">
+              <dt>
+                <kbd className="rounded-md border border-border bg-card px-2 py-1 font-mono text-sm text-foreground">
+                  {shortcut.keys}
+                </kbd>
+              </dt>
+              <dd className="flex-1 text-right text-sm text-muted-foreground">
+                {shortcut.description}
+              </dd>
+            </div>
+          ))}
+        </dl>
+
+        <p className="px-1 text-sm text-muted-foreground">
+          The board also works with the arrow keys: move between cells, then
+          press Enter or Space to call a number.
+        </p>
       </section>
     </PageShell>
   );

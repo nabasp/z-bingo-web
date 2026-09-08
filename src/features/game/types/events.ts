@@ -99,7 +99,9 @@ export type RoomCloseReason =
   | 'empty'
   | 'no_players_joined'
   | 'idle_timeout'
-  | 'server_shutdown';
+  | 'server_shutdown'
+  /** Somebody turned down a rematch, or let the offer lapse. */
+  | 'rematch_declined';
 
 /**
  * The room is gone, and why.
@@ -237,6 +239,28 @@ export interface VoiceCredentials {
   expiresAt: number;
 }
 
+/**
+ * Where an open rematch offer stands.
+ *
+ * `waitingFor` carries names rather than ids so a client can say who it is
+ * waiting on without holding the roster.
+ */
+export interface RematchState {
+  /** True once everybody accepted and the next round has begun. */
+  started: boolean;
+  /** Display names of players who have not answered yet. */
+  waitingFor: string[];
+  /** Epoch ms after which silence ends the room. */
+  expiresAt: number;
+}
+
+/** Sent to each player who has not yet answered an open rematch offer. */
+export interface RematchOfferPayload {
+  /** Who asked, by display name. */
+  fromName: string;
+  expiresAt: number;
+}
+
 export interface ClientToServerEvents {
   create_room: (
     payload: { size: number; maxPlayers: number; turnSeconds: number },
@@ -253,7 +277,16 @@ export interface ClientToServerEvents {
   start_game: () => void;
   submit_board: (payload: { board: number[] }) => void;
   call_number: (payload: { number: number }) => void;
-  rematch: (payload: { size?: number }) => void;
+  /**
+   * Ask to play again, or accept an offer already open.
+   *
+   * Any player may ask, and the asker counts as having accepted. Acked so the
+   * caller learns whether the round started, or whether it is now waiting on
+   * somebody else.
+   */
+  rematch: (ack: (res: Ack<RematchState>) => void) => void;
+  /** Turn down an open rematch. Closes the room for everybody. */
+  rematch_decline: () => void;
   leave_room: () => void;
 
   // ── Voice ────────────────────────────────────────────────────────────────
@@ -325,6 +358,10 @@ export interface ServerToClientEvents {
   turn_changed: (payload: TurnChangedPayload) => void;
   winner_declared: (payload: WinnerDeclaredPayload) => void;
   /** This room has been closed; stop showing it and go home. */
+  /** A player wants another round; you have not answered yet. */
+  rematch_offered: (payload: RematchOfferPayload) => void;
+  /** The offer is no longer open — accepted by all, or the room is closing. */
+  rematch_resolved: (payload: { started: boolean }) => void;
   room_closed: (payload: RoomClosedPayload) => void;
   error: (error: GameError) => void;
   session_superseded: () => void;

@@ -1,6 +1,17 @@
 import { Outlet } from 'react-router-dom';
 import { useGameFlowNavigation } from '@/features/game/hooks';
-import { VoiceProvider } from '@/features/voice';
+import { useMicShortcut, VoiceProvider } from '@/features/voice';
+
+/**
+ * Binds Alt+M for the whole game flow.
+ *
+ * A child rather than a call in `GameLayout` itself: the layout *renders* the
+ * provider, so it sits outside the context and cannot read it. Renders nothing.
+ */
+function VoiceShortcuts() {
+  useMicShortcut();
+  return null;
+}
 
 /**
  * Wraps every `/game/*` route and mounts the server-driven navigation once.
@@ -20,6 +31,7 @@ export function GameLayout() {
   useGameFlowNavigation();
   return (
     <VoiceProvider>
+      <VoiceShortcuts />
       <Outlet />
     </VoiceProvider>
   );

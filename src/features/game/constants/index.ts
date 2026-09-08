@@ -49,3 +49,12 @@ export const PLAYER_AVATAR_CLASSES = [
 export function playerAvatarClass(seatIndex: number): string {
   return PLAYER_AVATAR_CLASSES[seatIndex % PLAYER_AVATAR_CLASSES.length];
 }
+
+/**
+ * The board grid's DOM id.
+ *
+ * A constant rather than `useId()` because it is the address an outside
+ * shortcut uses to find the board. Exactly one board is mounted per route —
+ * setup and play are separate routes — so it cannot collide.
+ */
+export const BOARD_GRID_ID = 'board-grid';

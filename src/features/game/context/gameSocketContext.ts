@@ -3,6 +3,8 @@ import type { GameSocket } from '@/lib/socketClient';
 import type {
   GameError,
   PublicPlayer,
+  RematchOfferPayload,
+  RematchState,
   RoomClosedPayload,
   RoomSnapshot,
   ServerToClientEvents,
@@ -36,6 +38,13 @@ export interface GameSocketValue {
    */
   notice: RoomClosedPayload | null;
   winner: WinnerDeclaredPayload | null;
+  /**
+   * Somebody has asked to play again and this player has not answered.
+   *
+   * Null the rest of the time. The screen turns this into a prompt; the server
+   * closes the room if it goes unanswered, so it can never linger.
+   */
+  rematchOffer: RematchOfferPayload | null;
   /** This device's player within the room, if any. */
   me: PublicPlayer | null;
   isHost: boolean;
@@ -85,7 +94,15 @@ export interface GameSocketValue {
   startGame: () => void;
   submitBoard: (board: number[]) => void;
   callNumber: (value: number) => void;
-  rematch: (size?: number) => void;
+  /**
+   * Ask to play again, or accept an offer already open.
+   *
+   * Resolves once the server has counted the acceptance, saying whether the
+   * next round started or who it is still waiting on.
+   */
+  rematch: () => Promise<RematchState>;
+  /** Turn down an open offer. Ends the room for everyone. */
+  declineRematch: () => void;
   leaveRoom: () => void;
 }
 

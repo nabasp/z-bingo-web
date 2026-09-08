@@ -10,7 +10,6 @@ import {
 } from 'react';
 import { cn } from '@/lib/cn';
 import type { Cell, LineDescriptor } from '../types';
-import { BINGO_HEADER } from '../constants';
 import { cellLabel, type BoardVariant } from '../a11y/cellLabel';
 
 /** Spacing between cells, in px. Must match the `gap` used by the grid. */
@@ -22,19 +21,58 @@ const STRIKE_WIDTH = 5;
 /** How far a strike overhangs the centres of the end cells, as a cell fraction. */
 const STRIKE_OVERHANG = 0.5;
 
-/** Column letter headers — only meaningful for a 5×5 board (B-I-N-G-O). */
-export const BingoHeaderRow = memo(function BingoHeaderRow({ size }: { size: number }) {
-  if (size !== BINGO_HEADER.length) return null;
+export interface BingoHeaderRowProps {
+  /** The word this board spells, from the server. Length always equals `size`. */
+  word: string;
+  /**
+   * How many letters are earned — one per completed line.
+   *
+   * Struck through as they are won, which is the whole point of the word: it
+   * is the progress bar of a bingo game. Defaults to none, for setup.
+   */
+  earned?: number;
+}
+
+/**
+ * The word a player spells by completing lines.
+ *
+ * The word comes from the server (`RoomSnapshot.word`) rather than a constant
+ * here, because it differs per board size — BUS at 3×3, GAME at 4×4, BINGO at
+ * 5×5, and so on up to CHAMPION. This used to hardcode "BINGO" and render
+ * nothing at all for any other size, which quietly removed the feature from
+ * every board that was not 5×5.
+ */
+export const BingoHeaderRow = memo(function BingoHeaderRow({
+  word,
+  earned = 0,
+}: BingoHeaderRowProps) {
+  if (!word) return null;
+  const letters = word.split('');
+  // A 5×5 has twelve possible lines but only five letters, so the raw count can
+  // overshoot. Clamped here rather than at each call site, or the spoken label
+  // ends up saying "twelve of five letters complete".
+  const struck = Math.min(earned, letters.length);
+
   return (
-    // Five single letters would otherwise be five separate screen-reader stops
-    // that tell the player nothing they can act on. Column identity lives in
-    // each cell's own label, so these are pure decoration.
+    // One node, not one per letter: five separate screen-reader stops spelling
+    // out B-I-N-G-O tell a player nothing they can act on, and column identity
+    // already lives in each cell's own label. The progress *is* worth saying,
+    // so the row carries a single composed label instead of being hidden.
     <div
-      aria-hidden="true"
+      role="status"
+      aria-label={`${word}. ${struck} of ${letters.length} letters complete.`}
       className="grid w-full"
-      style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))`, gap: CELL_GAP }}>
-      {BINGO_HEADER.split('').map(letter => (
-        <span key={letter} className="py-1.5 text-center text-base font-bold text-primary">
+      style={{ gridTemplateColumns: `repeat(${letters.length}, minmax(0, 1fr))`, gap: CELL_GAP }}>
+      {letters.map((letter, index) => (
+        <span
+          key={`${letter}-${index}`}
+          aria-hidden="true"
+          className={cn(
+            'py-1.5 text-center text-base font-bold transition-colors',
+            index < struck
+              ? 'text-primary line-through decoration-2'
+              : 'text-muted-foreground',
+          )}>
           {letter}
         </span>
       ))}
@@ -207,6 +245,14 @@ export interface BoardGridProps {
   cellHint?: string;
   /** Spoken as the grid's own name, e.g. "Your board". */
   label: string;
+  /**
+   * Set when something outside the grid needs to move focus into it.
+   *
+   * An id rather than a forwarded ref: the caller is a shortcut hook that only
+   * ever reads the live DOM, and an id keeps it entirely decoupled from this
+   * component's render cycle and memoization.
+   */
+  id?: string;
 }
 
 /**
@@ -224,6 +270,7 @@ export interface BoardGridProps {
 export function BoardGrid({
   cells,
   size,
+  id,
   variant = 'play',
   selectedIndex,
   completedLines,
@@ -352,6 +399,7 @@ export function BoardGrid({
 
       <div
         ref={gridRef}
+        id={id}
         role="grid"
         aria-label={label}
         aria-rowcount={size}

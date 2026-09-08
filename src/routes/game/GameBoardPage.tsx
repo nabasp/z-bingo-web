@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Banner, Button, ConfirmDialog, PageShell } from '@/components/ui';
 import { announcer } from '@/lib/a11y/Announcer';
 import { haptic } from '@/lib/a11y/haptics';
+import { SHORTCUTS } from '@/lib/a11y/shortcuts';
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
+import { useShortcut } from '@/lib/a11y/useShortcut';
 import { audioManager } from '@/lib/audio/AudioManager';
 import { useAudioChannel } from '@/lib/audio/useAudioChannel';
 import {
@@ -17,12 +19,27 @@ import {
 } from '@/features/game/components';
 import { useGameSocket } from '@/features/game/context';
 import { VoiceBanner, VoiceButton } from '@/features/voice';
-import { useGame } from '@/features/game/hooks';
+import { useBoardFocusShortcut, useGame } from '@/features/game/hooks';
+import { BOARD_GRID_ID } from '@/features/game/constants';
 import type { Cell } from '@/features/game/types';
 import { PATHS } from '../paths';
 
 /** Described to every cell that could actually be called right now. */
 const CELL_HINT = 'Calls this number.';
+
+/**
+ * Read out on arrival, and shown to browse-mode users just above the board.
+ *
+ * A module constant so the announcement and the on-page text cannot drift, and
+ * so `useAnnounceOnFocus`'s `detail` keeps a stable identity — it re-parks focus
+ * whenever it changes, which would drag a player off the cell they were
+ * exploring.
+ */
+const KEYBOARD_HELP =
+  `Move between cells with the arrow keys and press Enter on a number to call it. ` +
+  `Press ${SHORTCUTS.focusBoard.spoken} to jump to the board and back, ` +
+  `${SHORTCUTS.toggleMic.spoken} to mute or unmute, ` +
+  `${SHORTCUTS.exitGame.spoken} to leave the game.`;
 
 export function GameBoardPage() {
   const navigate = useNavigate();
@@ -35,6 +52,7 @@ export function GameBoardPage() {
     currentPlayer,
     isMyTurn,
     boardSize,
+    word,
     recentCalls,
     turnNumber,
     turnEndsAt,
@@ -92,9 +110,17 @@ export function GameBoardPage() {
    */
   const headingRef = useAnnounceOnFocus({
     title: 'Game board',
-    detail: `Your ${boardSize} by ${boardSize} board. Move between cells with the arrow keys and press Enter on a number to call it.`,
+    detail: `Your ${boardSize} by ${boardSize} board. ${KEYBOARD_HELP}`,
     key: String(boardSize),
   });
+
+  // Alt+B jumps into the board and back out to wherever the player was.
+  useBoardFocusShortcut({ gridId: BOARD_GRID_ID, fallbackRef: headingRef });
+
+  // Escape asks before leaving: going mid-game forfeits the match. The hook
+  // ignores the key while a dialog is open, so pressing it again dismisses the
+  // confirmation rather than reopening it.
+  useShortcut(SHORTCUTS.exitGame.chord, () => setConfirmingExit(true));
 
   return (
     <PageShell width="wide">
@@ -125,8 +151,15 @@ export function GameBoardPage() {
           {/* Square board: bound the height, or a small board outgrows the
               viewport and the controls fall below the fold. */}
           <div className="mx-auto flex w-full max-w-[min(36rem,58vh)] flex-col gap-1">
-            <BingoHeaderRow size={boardSize} />
+            {/* Read by browse-mode screen-reader users arrowing down the page,
+                which is where they meet the board. Not `aria-describedby` on
+                the grid: that container is never focused, and the cells already
+                use their description for the per-cell hint. */}
+            <p className="sr-only">{KEYBOARD_HELP}</p>
+
+            <BingoHeaderRow word={word} earned={completedLines.length} />
             <BoardGrid
+              id={BOARD_GRID_ID}
               label={`Your board, ${boardSize} by ${boardSize}`}
               cells={board}
               size={boardSize}

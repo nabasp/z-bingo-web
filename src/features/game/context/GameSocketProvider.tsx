@@ -34,6 +34,8 @@ import {
 } from './gameSocketContext';
 import type {
   GameError,
+  RematchOfferPayload,
+  RematchState,
   RoomClosedPayload,
   RoomSnapshot,
   ServerToClientEvents,
@@ -98,6 +100,7 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
   const lastRoomRef = useRef<RoomSnapshot | null>(null);
   const [notice, setNotice] = useState<RoomClosedPayload | null>(null);
   const [winner, setWinner] = useState<WinnerDeclaredPayload | null>(null);
+  const [rematchOffer, setRematchOffer] = useState<RematchOfferPayload | null>(null);
 
   useEffect(() => {
     if (authStatus !== 'authenticated') {
@@ -179,6 +182,15 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       applySnapshot(snapshot);
     });
     socket.on('winner_declared', payload => setWinner(payload));
+
+    // Somebody wants another round. The prompt this raises is the only place
+    // a player is asked, so it is cleared by the server resolving the offer
+    // rather than by any local timer.
+    socket.on('rematch_offered', payload => setRematchOffer(payload));
+    socket.on('rematch_resolved', payload => {
+      setRematchOffer(null);
+      if (payload.started) setWinner(null);
+    });
     socket.on('error', payload => {
       if (!THROTTLED_ERRORS.has(payload.code)) {
         rejectionRef.current = { code: '', count: 0 };
@@ -215,6 +227,7 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       setNotice(payload);
       setRoom(null);
       setWinner(null);
+      setRematchOffer(null);
     });
 
     socket.on('session_superseded', () => {
@@ -358,9 +371,30 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
     socketRef.current?.emit('call_number', { number: value });
   }, []);
 
-  const rematch = useCallback((size?: number) => {
-    setWinner(null);
-    socketRef.current?.emit('rematch', { size });
+  /**
+   * Ask for another round, or accept one already asked for.
+   *
+   * The winner banner stays up until the server confirms the round actually
+   * started — clearing it on the press would show an empty results screen to
+   * someone still waiting on the other players to answer.
+   */
+  const rematch = useCallback(async (): Promise<RematchState> => {
+    const state = await request<RematchState>((socket, resolve, reject) => {
+      socket.emit('rematch', res => {
+        if (res.ok) resolve(res.data);
+        else reject(new GameRequestError(res.error));
+      });
+    });
+    if (state.started) {
+      setWinner(null);
+      setRematchOffer(null);
+    }
+    return state;
+  }, [request]);
+
+  const declineRematch = useCallback(() => {
+    setRematchOffer(null);
+    socketRef.current?.emit('rematch_decline');
   }, []);
 
   const leaveRoom = useCallback(() => {
@@ -400,6 +434,8 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       submitBoard,
       callNumber,
       rematch,
+      declineRematch,
+      rematchOffer,
       leaveRoom,
     }),
     [
@@ -422,6 +458,8 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       submitBoard,
       callNumber,
       rematch,
+      declineRematch,
+      rematchOffer,
       leaveRoom,
     ],
   );
