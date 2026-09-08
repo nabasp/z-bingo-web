@@ -10,6 +10,7 @@ import { FriendsPage } from './app/FriendsPage';
 import { HomePage } from './app/HomePage';
 import { PlayWithFriendsPage } from './app/PlayWithFriendsPage';
 import { ProfilePage } from './app/ProfilePage';
+import { GuidePage } from './app/GuidePage';
 import { SettingsPage } from './app/SettingsPage';
 import { BoardSetupPage } from './game/BoardSetupPage';
 import { CreateRoomPage } from './game/CreateRoomPage';
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
           { path: PATHS.home, element: <HomePage /> },
           { path: PATHS.profile, element: <ProfilePage /> },
           { path: PATHS.settings, element: <SettingsPage /> },
+          { path: PATHS.guide, element: <GuidePage /> },
           { path: PATHS.friends, element: <FriendsPage /> },
           { path: PATHS.playWithFriends, element: <PlayWithFriendsPage /> },
           {

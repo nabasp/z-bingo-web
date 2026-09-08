@@ -16,6 +16,7 @@ export const PATHS = {
   home: '/',
   profile: '/profile',
   settings: '/settings',
+  guide: '/guide',
   friends: '/friends',
   playWithFriends: '/play-with-friends',
 

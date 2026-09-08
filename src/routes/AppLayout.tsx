@@ -5,6 +5,7 @@ import { useAuth } from '@/features/auth/context';
 import { PlayerAvatar } from '@/features/game/components';
 import { SocialFeedbackBridge } from '@/features/social';
 import { InviteListener } from '@/features/social/components/InviteListener';
+import { HelpButton } from '@/features/guide/HelpButton';
 import { PATHS } from './paths';
 
 const NAV_ITEMS = [
@@ -62,6 +63,7 @@ export function AppLayout() {
                   {item.label}
                 </NavLink>
               ))}
+              <HelpButton className="ml-1 h-9 w-9 text-base" />
               <Link
                 to={PATHS.profile}
                 aria-label="Open profile"

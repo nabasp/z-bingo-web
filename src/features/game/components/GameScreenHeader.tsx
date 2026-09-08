@@ -1,11 +1,14 @@
 import type { Ref } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { HelpButton } from '@/features/guide/HelpButton';
 
 export interface GameScreenHeaderProps {
   title: string;
   /** Renders a back control. Defaults to browser history when no handler given. */
   onBack?: () => void;
   showBack?: boolean;
+  /** The “?” that opens the Game Guide. On by default. */
+  showHelp?: boolean;
   /** Focus target on arrival; see `useAnnounceOnFocus`. */
   headingRef?: Ref<HTMLHeadingElement>;
 }
@@ -15,6 +18,7 @@ export function GameScreenHeader({
   title,
   onBack,
   showBack = true,
+  showHelp = true,
   headingRef,
 }: GameScreenHeaderProps) {
   const navigate = useNavigate();
@@ -36,9 +40,13 @@ export function GameScreenHeader({
       <h1
         ref={headingRef}
         tabIndex={-1}
-        className="text-xl font-bold text-foreground outline-none">
+        className="flex-1 text-xl font-bold text-foreground outline-none">
         {title}
       </h1>
+
+      {/* Last in the row so it never comes between the back control and the
+          title, which is the order a screen reader reads them in. */}
+      {showHelp ? <HelpButton /> : null}
     </div>
   );
 }
