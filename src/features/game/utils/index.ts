@@ -134,6 +134,56 @@ export function generatePermutation(size: BoardSize): number[] {
   return nums;
 }
 
+/**
+ * The next number to place: the lowest of 1..n² not already on the board.
+ *
+ * "Lowest unused" rather than "one more than the highest" so that clearing a
+ * cell puts its number straight back into circulation. That is what makes
+ * correcting a mistake a two-step operation — clear the wrong cell, fill the
+ * right one — instead of needing an undo stack, and it is why a duplicate can
+ * never arise: the number is chosen from what is missing, not from a counter.
+ *
+ * Returns null only when the board is already full.
+ */
+export function nextAvailableNumber(cells: Cell[], size: BoardSize): number | null {
+  const used = new Set(cells.map(cell => cell.value).filter((v): v is number => v !== null));
+  for (let value = 1; value <= size * size; value++) {
+    if (!used.has(value)) return value;
+  }
+  return null;
+}
+
+/**
+ * Rearrange the numbers already placed, among the cells already holding them.
+ *
+ * Deliberately conservative: it neither invents a number nor moves an empty
+ * cell. On a half-filled board the same holes stay in the same places and only
+ * the values move, so a player who is part-way through does not lose their
+ * sense of the board's shape — which matters most to someone who cannot see it.
+ *
+ * `rng` is injectable so tests can assert the permutation rather than hope.
+ */
+export function shuffleFilledCells(
+  cells: Cell[],
+  rng: () => number = Math.random,
+): Cell[] {
+  const filled = cells
+    .map((cell, index) => ({ index, value: cell.value }))
+    .filter((entry): entry is { index: number; value: number } => entry.value !== null);
+
+  const values = filled.map(entry => entry.value);
+  for (let i = values.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [values[i], values[j]] = [values[j], values[i]];
+  }
+
+  const next = [...cells];
+  filled.forEach((entry, order) => {
+    next[entry.index] = { ...next[entry.index], value: values[order] };
+  });
+  return next;
+}
+
 /** An empty board of `size²` cells. */
 export function makeEmptyBoard(size: BoardSize): Cell[] {
   return Array.from({ length: size * size }, (_, index) => ({

@@ -3,98 +3,97 @@
  * Same logic and same public shape; only import paths differ.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { audioManager } from '@/lib/audio/AudioManager';
 import type { BoardSize, Cell } from '../types';
 import {
   isBoardComplete,
   makeEmptyBoard,
-  makeFilledBoard,
-  toCells,
+  nextAvailableNumber,
+  shuffleFilledCells,
 } from '../utils';
 import { useGameSocket } from '../context';
 
 /**
  * Board Setup: a purely local draft until it is submitted.
  *
- * The draft starts from the board the server dealt on join, so setup opens on a
- * playable arrangement — a player happy with theirs can submit immediately.
- * Shuffle and swapping both preserve the permutation, so the draft stays valid;
- * the server re-validates on submit regardless.
+ * The player builds the board by hand. It starts empty, and each selection of
+ * an empty cell drops the next number into it — the *order you choose cells* is
+ * what decides the arrangement, so nothing has to be typed. Selecting a filled
+ * cell empties it again, and its number returns to the pool.
+ *
+ * That pairing is the whole correction story, and it is why there is no undo
+ * button: because the next number is always the lowest one missing, clearing a
+ * cell and choosing another moves a number, and no sequence of presses can
+ * produce a duplicate or a gap in the final board. The old Random Fill and
+ * Reset are gone — an automatically generated board defeated the point.
+ *
+ * The server still deals a board on join; it is deliberately ignored here, and
+ * whatever is submitted replaces it. The server re-validates on submit
+ * regardless.
  */
 export function useBoardSetup(size: BoardSize) {
-  const { submitBoard, me, room } = useGameSocket();
-  const dealt = room?.yourBoard;
-  const [cells, setCells] = useState<Cell[]>(() =>
-    dealt ? toCells(dealt, []) : makeEmptyBoard(size),
-  );
-  const [selected, setSelected] = useState<number | null>(null);
+  const { submitBoard, me } = useGameSocket();
+  const [cells, setCells] = useState<Cell[]>(() => makeEmptyBoard(size));
 
   /**
-   * Adopt the server's board whenever it actually changes — on arrival, and
-   * again when the host changes the size and everyone is re-dealt.
+   * Start over when the host changes the board size.
    *
-   * Keyed on the contents rather than the array identity: a snapshot arrives on
-   * every room event and would otherwise wipe a half-finished set of swaps.
+   * Keyed on the size alone. The previous version adopted the server's dealt
+   * board here; now that the board is built by hand there is nothing to adopt,
+   * and reacting to every snapshot would wipe a half-finished board on any
+   * unrelated room event.
    */
-  // Seeded with what `useState` already adopted above, so mounting does not
-  // immediately re-set every cell and re-render the whole grid.
-  const syncedTo = useRef<string | null>(dealt ? dealt.join(',') : null);
+  const syncedTo = useRef(size);
   useEffect(() => {
-    if (!dealt) return;
-    const key = dealt.join(',');
-    if (syncedTo.current === key) return;
-    syncedTo.current = key;
-    setSelected(null);
-    setCells(toCells(dealt, []));
-  }, [dealt]);
+    if (syncedTo.current === size) return;
+    syncedTo.current = size;
+    setCells(makeEmptyBoard(size));
+  }, [size]);
 
   /** The server marks a player `ready` once their board is locked in. */
   const submitted = me?.ready ?? false;
 
+  /** Placed next, and shown in the instructions so it is never a surprise. */
+  const nextNumber = useMemo(() => nextAvailableNumber(cells, size), [cells, size]);
+
   // Purely local board edits, so nothing reaches the server to diff against —
-  // these two cues are played here rather than by the snapshot bridge.
-  const randomFill = () => {
-    setSelected(null);
-    setCells(makeFilledBoard(size));
+  // these cues are played here rather than by the snapshot bridge.
+  const shuffle = () => {
+    setCells(prev => shuffleFilledCells(prev));
     audioManager.play('board_shuffled');
   };
 
-  const shuffle = randomFill;
-
-  const reset = () => {
-    setSelected(null);
-    setCells(makeEmptyBoard(size));
-    audioManager.play('board_reset');
-  };
-
   const onCellPress = (cell: Cell) => {
-    // A tap on an empty cell, or any tap once the board is locked, does
-    // nothing — say so rather than swallowing it silently.
-    if (submitted || cell.value === null) {
+    if (submitted) {
       audioManager.play('board_invalid');
       return;
     }
-    if (selected === null) {
-      setSelected(cell.index);
-      audioManager.play('cell_select');
+
+    // A filled cell empties, returning its number to the pool. This is the
+    // only way to correct a mistake, and it is why `nextAvailableNumber` picks
+    // the lowest missing number rather than counting upwards.
+    if (cell.value !== null) {
+      setCells(prev => {
+        const next = [...prev];
+        next[cell.index] = { ...next[cell.index], value: null };
+        return next;
+      });
+      audioManager.play('board_reset');
       return;
     }
-    if (selected === cell.index) {
-      setSelected(null);
-      audioManager.play('cell_select');
+
+    if (nextNumber === null) {
+      audioManager.play('board_invalid');
       return;
     }
+
     setCells(prev => {
       const next = [...prev];
-      const a = next[selected];
-      const b = next[cell.index];
-      next[selected] = { ...a, value: b.value };
-      next[cell.index] = { ...b, value: a.value };
+      next[cell.index] = { ...next[cell.index], value: nextNumber };
       return next;
     });
-    setSelected(null);
-    audioManager.play('cell_swap');
+    audioManager.play('cell_select');
   };
 
   const isComplete = isBoardComplete(cells);
@@ -108,11 +107,11 @@ export function useBoardSetup(size: BoardSize) {
 
   return {
     cells,
-    /** Exactly one cell can be picked, so this is a plain index, not a set. */
-    selectedIndex: selected,
-    randomFill,
+    /** The number the next empty cell will receive, or null when full. */
+    nextNumber,
+    /** How many cells still need a number. Drives the instructions. */
+    remaining: cells.filter(cell => cell.value === null).length,
     shuffle,
-    reset,
     onCellPress,
     isComplete,
     submitted,

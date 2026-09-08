@@ -99,7 +99,9 @@ export const WEB_CONTROL_SECTIONS: GuideSection[] = [
     title: 'Mouse and touch',
     items: [
       { text: 'Click or tap a number on your board to call it.' },
-      { text: 'In board setup, click one cell then another to swap them.' },
+      {
+        text: 'In board setup, click an empty cell to place the next number, or a filled one to clear it.',
+      },
       {
         text: 'Every control is at least 44 pixels tall, so nothing needs a precise aim.',
       },
@@ -179,13 +181,20 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: 'setup',
     title: 'Setting up your board',
     intro:
-      'Before play starts, everyone arranges their own board. You are dealt one already filled in, so you can simply accept it.',
+      'Before play starts, everyone builds their own board by hand. It starts empty, and you place the numbers by choosing cells.',
     items: [
-      { term: 'Random Fill', text: 'Deal a completely new arrangement.' },
-      { term: 'Shuffle', text: 'Rearrange the numbers you already have.' },
-      { term: 'Reset', text: 'Clear the board and start again.' },
       {
-        text: 'To swap two numbers, activate one cell and then another. The two trade places.',
+        text: 'Choose any empty cell and the next number drops into it — 1 first, then 2, and so on. You never type a number.',
+      },
+      {
+        text: 'The order you choose cells is what decides the arrangement. Choose the bottom-right cell first and it gets the 1.',
+      },
+      {
+        text: 'Made a mistake? Choose a filled cell to empty it. Its number goes back into the pool and is the next one placed, so you can move a number by clearing one cell and choosing another.',
+      },
+      {
+        term: 'Shuffle',
+        text: 'Rearranges the numbers you have already placed. It never adds a number and never changes which numbers are on the board — the empty cells stay exactly where they are.',
       },
       {
         text: 'Choose Continue when you are happy. Your board locks and the game starts once everyone has locked theirs.',

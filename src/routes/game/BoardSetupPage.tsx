@@ -28,7 +28,7 @@ import { PATHS } from '../paths';
  * the whole grid.
  */
 const CELL_HINT =
-  'Press Enter to pick this cell, then Enter on another to swap them.';
+  'Press Enter on an empty cell to place the next number, or on a filled one to clear it.';
 
 /**
  * Read out on arrival, and shown to browse-mode users just above the board.
@@ -40,7 +40,8 @@ const CELL_HINT =
  * unconfirmed one would be worse than leaving the key alone.
  */
 const KEYBOARD_HELP =
-  `Use Random Fill, then swap cells to taste, then choose Continue. ` +
+  `Choose cells in any order to place the numbers 1 upwards, then choose Continue. ` +
+  `Choose a filled cell to clear it. ` +
   `Move between cells with the arrow keys. ` +
   `Press ${SHORTCUTS.focusBoard.spoken} to jump to the board and back, ` +
   `${SHORTCUTS.toggleMic.spoken} to mute or unmute.`;
@@ -71,10 +72,9 @@ export function BoardSetupPage() {
 
   const {
     cells,
-    selectedIndex,
-    randomFill,
+    nextNumber,
+    remaining,
     shuffle,
-    reset,
     onCellPress,
     isComplete,
     submitted,
@@ -86,7 +86,7 @@ export function BoardSetupPage() {
       <PageHeading
         headingRef={headingRef}
         title="Set Up Your Board"
-        subtitle="Use Random Fill or Shuffle, then pick two cells to swap."
+        subtitle="Choose cells in any order to place the numbers."
       />
 
       <ConnectionBanner status={connection} />
@@ -110,21 +110,21 @@ export function BoardSetupPage() {
           cells={cells}
           size={size}
           variant="setup"
-          selectedIndex={selectedIndex}
           onCellPress={onCellPress}
           canActivate={!submitted}
           cellHint={CELL_HINT}
         />
       </div>
 
-      <div className="mx-auto flex w-full max-w-[min(32rem,60vh)] gap-2">
-        <Button variant="outline" size="md" className="flex-1" disabled={submitted} onClick={reset}>
-          Reset
-        </Button>
-        <Button variant="outline" size="md" className="flex-1" disabled={submitted} onClick={randomFill}>
-          Random Fill
-        </Button>
-        <Button variant="outline" size="md" className="flex-1" disabled={submitted} onClick={shuffle}>
+      <div className="mx-auto flex w-full max-w-[min(32rem,60vh)]">
+        {/* Shuffle rearranges what you have placed; it never invents a number,
+            so it is useful on a part-filled board too. */}
+        <Button
+          variant="outline"
+          size="md"
+          fullWidth
+          disabled={submitted}
+          onClick={shuffle}>
           Shuffle
         </Button>
       </div>
@@ -145,14 +145,20 @@ export function BoardSetupPage() {
           Leave Room
         </Button>
 
+        {/*
+          Announced on every change, so a player who cannot see the board still
+          knows which number lands next and how much is left. Saying the number
+          is what makes "choose a cell" a complete instruction rather than half
+          of one.
+        */}
         <p role="status" aria-live="polite" className="text-center text-sm text-muted-foreground">
           {submitted
             ? 'Board locked in. Waiting for the other players.'
-            : selectedIndex !== null
-              ? 'Now choose a second cell to swap the two.'
-              : isComplete
-                ? 'Pick any two cells to swap them, or choose Continue.'
-                : 'Choose Random Fill to place your numbers.'}
+            : isComplete
+              ? 'Board full. Choose Continue, or choose a cell to clear it.'
+              : `Choose a cell to place ${nextNumber}. ${remaining} ${
+                  remaining === 1 ? 'cell' : 'cells'
+                } left.`}
         </p>
 
         {!isComplete ? (
