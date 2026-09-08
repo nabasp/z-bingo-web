@@ -6,7 +6,7 @@
  * disable in GameSocketProvider.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Room, RoomEvent as RoomEventEnum } from 'livekit-client';
+import type { RemoteTrack, Room, RoomEvent as RoomEventEnum } from 'livekit-client';
 import { useGameSocket } from '@/features/game/context';
 import type { VoiceCredentials, VoiceStatus } from '@/features/game/types';
 import { announcer } from '@/lib/a11y';
@@ -16,6 +16,8 @@ import { classifyVoiceError } from '../voiceErrors';
 
 /** Stable identity, so the "no call" participants value never changes. */
 const EMPTY_MICS: ReadonlyMap<string, VoiceStatus> = new Map();
+/** Stable identity, so "nobody is talking" never re-renders a listener. */
+const EMPTY_SPEAKING: ReadonlySet<string> = new Set();
 
 /**
  * Owns the LiveKit session for the current game room.
@@ -40,8 +42,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(false);
   const [mics, setMics] = useState<ReadonlyMap<string, VoiceStatus>>(new Map());
+  const [speaking, setSpeaking] = useState<ReadonlySet<string>>(EMPTY_SPEAKING);
 
   const roomRef = useRef<Room | null>(null);
+  /** Holds one <audio> element per remote voice. See the note at its JSX. */
+  const audioHostRef = useRef<HTMLDivElement | null>(null);
   const epochRef = useRef(0);
   /** Bumped by `retry()` to re-run the effect without changing rooms. */
   const [attempt, setAttempt] = useState(0);
@@ -117,6 +122,17 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
         wireSession(session, RoomEvent, {
           syncMics,
+          onAudioTrack: (track, subscribed) => {
+            const host = audioHostRef.current;
+            if (!host) return;
+            if (subscribed) {
+              // Attaching is what makes the track audible; appending to the
+              // document is what lets the browser autoplay it.
+              host.appendChild(track.attach());
+            } else {
+              for (const element of track.detach()) element.remove();
+            }
+          },
           onReconnecting: () => {
             if (stale()) return;
             setConnection('reconnecting');
@@ -137,8 +153,13 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
             // handled by `code` changing, and that path already tore this down,
             // so reaching here means the session dropped underneath us.
             setConnection('off');
-            setMics(new Map());
+            setMics(EMPTY_MICS);
+            setSpeaking(EMPTY_SPEAKING);
             setMicOn(false);
+          },
+          onSpeakers: identities => {
+            if (stale()) return;
+            setSpeaking(identities.length === 0 ? EMPTY_SPEAKING : new Set(identities));
           },
           onMediaError: (error: unknown) => {
             if (stale()) return;
@@ -251,14 +272,32 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   // Its own object, so a mute somewhere in the room does not hand every
   // consumer of VoiceContext a new value.
   const participants = useMemo<VoiceParticipantsValue>(
-    () => ({ mics: code ? mics : EMPTY_MICS }),
-    [code, mics],
+    () => ({
+      mics: code ? mics : EMPTY_MICS,
+      speaking: code ? speaking : EMPTY_SPEAKING,
+    }),
+    [code, mics, speaking],
   );
 
   return (
     <VoiceContext.Provider value={value}>
       <VoiceParticipantsContext.Provider value={participants}>
         {children}
+        {/*
+          Where remote voices actually play.
+
+          `track.attach()` builds an <audio> element, but the SDK only autoplays
+          a track once that element is in the document — an attached-but-orphaned
+          element is silent. Hidden rather than absent: `display: none` would let
+          some browsers treat it as inert, so it is positioned out of view
+          instead, and marked aria-hidden so a screen reader does not announce a
+          row of empty media players.
+        */}
+        <div
+          ref={audioHostRef}
+          aria-hidden="true"
+          style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}
+        />
       </VoiceParticipantsContext.Provider>
     </VoiceContext.Provider>
   );
@@ -266,6 +305,10 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
 interface SessionHandlers {
   syncMics: () => void;
+  /** Called for remote audio tracks only, as they come and go. */
+  onAudioTrack: (track: RemoteTrack, subscribed: boolean) => void;
+  /** The identities LiveKit currently considers to be talking. */
+  onSpeakers: (identities: string[]) => void;
   onReconnecting: () => void;
   onReconnected: () => void;
   onDisconnected: () => void;
@@ -285,17 +328,25 @@ function wireSession(
   handlers: SessionHandlers,
 ): void {
   const { syncMics } = handlers;
+  /** Audio only: this app publishes no video, so anything else is ignored. */
+  const audio = (subscribed: boolean) => (track: RemoteTrack) => {
+    if (track.kind === 'audio') handlers.onAudioTrack(track, subscribed);
+    syncMics();
+  };
   session
     .on(RoomEvent.ParticipantConnected, syncMics)
     .on(RoomEvent.ParticipantDisconnected, syncMics)
     .on(RoomEvent.TrackMuted, syncMics)
     .on(RoomEvent.TrackUnmuted, syncMics)
-    .on(RoomEvent.TrackSubscribed, syncMics)
-    .on(RoomEvent.TrackUnsubscribed, syncMics)
+    .on(RoomEvent.TrackSubscribed, audio(true))
+    .on(RoomEvent.TrackUnsubscribed, audio(false))
     .on(RoomEvent.LocalTrackPublished, syncMics)
     .on(RoomEvent.LocalTrackUnpublished, syncMics)
     .on(RoomEvent.Reconnecting, handlers.onReconnecting)
     .on(RoomEvent.Reconnected, handlers.onReconnected)
     .on(RoomEvent.Disconnected, handlers.onDisconnected)
+    .on(RoomEvent.ActiveSpeakersChanged, speakers =>
+      handlers.onSpeakers(speakers.map(speaker => speaker.identity)),
+    )
     .on(RoomEvent.MediaDevicesError, handlers.onMediaError);
 }

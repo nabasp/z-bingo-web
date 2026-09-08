@@ -16,6 +16,13 @@ import type { VoiceStatus } from '@/features/game/types';
 export interface VoiceParticipantsValue {
   /** uid → microphone state. A missing key means "not in the call". */
   mics: ReadonlyMap<string, VoiceStatus>;
+  /**
+   * Who is audibly talking right now, from LiveKit's own speaker detection.
+   *
+   * Purely decorative — it drives a ripple next to the speaker's name. Nothing
+   * about the game depends on it, and no state is conveyed by it alone.
+   */
+  speaking: ReadonlySet<string>;
 }
 
 export const VoiceParticipantsContext =

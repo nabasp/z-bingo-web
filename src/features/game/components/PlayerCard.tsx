@@ -3,6 +3,7 @@ import { Card } from '@/components/ui';
 import { sentence } from '@/lib/a11y/phrases';
 import type { Player } from '../types';
 import { PlayerAvatar } from './PlayerAvatar';
+import { SpeakingRipple } from '@/features/voice';
 import { HostBadge, ReadyBadge, StatusBadge } from './badges';
 
 export interface PlayerCardProps {
@@ -37,6 +38,9 @@ export const PlayerCard = memo(function PlayerCard({ player, seatIndex }: Player
               {displayName}
             </span>
             {player.isHost ? <HostBadge /> : null}
+            {/* Beside the name, where the eye already is when you wonder who
+                is talking. Decorative — the mic state below says it in words. */}
+            <SpeakingRipple playerId={player.id} />
           </span>
           <StatusBadge connection={player.connection} playerId={player.id} />
         </div>

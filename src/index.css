@@ -100,3 +100,69 @@
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Speaking ripple
+   ---------------------------------------------------------------------------
+   Expanding rings shown beside a player while they are talking. Sized in `em`
+   so it scales with the text it sits beside, and coloured with the primary
+   token rather than a literal so it follows the theme.
+
+   Decorative only: `SpeakingRipple` is aria-hidden, and microphone state is
+   always stated in words elsewhere. Nothing here is the sole carrier of any
+   information. */
+@keyframes voice-ripple-out {
+  from {
+    transform: scale(0.4);
+    opacity: 0.55;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.voice-ripple {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  vertical-align: middle;
+}
+
+.voice-ripple__ring,
+.voice-ripple__core {
+  position: absolute;
+  border-radius: 9999px;
+  background-color: var(--color-primary);
+}
+
+.voice-ripple__ring {
+  inset: 0;
+  animation: voice-ripple-out 1.6s ease-out infinite;
+}
+
+/* Half a cycle behind, so the two read as a continuous ripple. A negative
+   delay starts it mid-animation instead of waiting 0.8s for the first ring. */
+.voice-ripple__ring--delayed {
+  animation-delay: -0.8s;
+}
+
+/* The steady centre. Without it the ripple visibly "restarts" each cycle. */
+.voice-ripple__core {
+  width: 0.4em;
+  height: 0.4em;
+}
+
+/* The global reduce block freezes animations, which would strand the rings
+   fully expanded — a permanent halo next to a name, reading as a status this
+   is not. Hide the whole thing instead; the written mic state already carries
+   the meaning. */
+@media (prefers-reduced-motion: reduce) {
+  .voice-ripple {
+    display: none;
+  }
+}
