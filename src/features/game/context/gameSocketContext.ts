@@ -9,6 +9,7 @@ import type {
   RoomSnapshot,
   ServerToClientEvents,
   WinnerDeclaredPayload,
+  TurnChangeReason,
 } from '../types/events';
 
 export type SocketStatus = 'idle' | 'connecting' | 'connected' | 'offline';
@@ -47,6 +48,16 @@ export interface GameSocketValue {
   rematchOffer: RematchOfferPayload | null;
   /** This device's player within the room, if any. */
   me: PublicPlayer | null;
+  /**
+   * Why the turn last moved, straight from the server's `turn_changed`.
+   *
+   * The feedback layer used to infer a timeout from the *shape* of a snapshot —
+   * "the turn advanced, nobody called, nobody left, so the clock must have run
+   * out" — while the server had been saying so outright all along and nothing
+   * was listening. Null until the first `turn_changed` of a room, so the old
+   * inference still covers the gap.
+   */
+  turnChangeReason: TurnChangeReason | null;
   isHost: boolean;
   isMyTurn: boolean;
   clearError: () => void;

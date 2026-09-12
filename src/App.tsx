@@ -4,6 +4,8 @@ import {
   audioManager,
   connectAudioToAccessibility,
   loadHapticsPreference,
+  loadNotationPreference,
+  loadSelfVoicePreference,
 } from '@/lib';
 import { AuthProvider } from '@/features/auth/context';
 import { GameFeedbackBridge } from '@/features/game/a11y';
@@ -24,6 +26,8 @@ function useAudioLifecycle() {
   useEffect(() => {
     const disconnect = connectAudioToAccessibility();
     loadHapticsPreference();
+    loadNotationPreference();
+    loadSelfVoicePreference();
     audioManager.preload();
 
     const onVisibilityChange = () => {

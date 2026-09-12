@@ -1,9 +1,10 @@
+import { useCallback } from 'react';
 import { announcer, sentence, SHORTCUTS, useShortcut } from '@/lib/a11y';
 import { useVoice } from '../context/useVoice';
 import { VOICE_LABEL, VOICE_WHY } from '../voiceLabels';
 
 /**
- * Alt+M: mute or unmute, from anywhere in the game.
+ * Mute or unmute, and say which it now is.
  *
  * Unlike the button, this one always speaks. The button can stay silent because
  * pressing it means it was focused, and a screen reader re-reads a focused
@@ -14,10 +15,10 @@ import { VOICE_LABEL, VOICE_WHY } from '../voiceLabels';
  * Not assertive: muting is not urgent, and interrupting would discard whatever
  * the announcer is part-way through saying about the turn.
  */
-export function useMicShortcut(): void {
+export function useMicToggleAction(): () => void {
   const { connection, micOn, toggleMic } = useVoice();
 
-  useShortcut(SHORTCUTS.toggleMic.chord, () => {
+  return useCallback(() => {
     if (connection === 'live') {
       // `micOn` here is the value before the toggle, and `toggleMic` updates
       // optimistically — so the state being announced is the one after.
@@ -35,5 +36,16 @@ export function useMicShortcut(): void {
       sentence(VOICE_LABEL[connection], VOICE_WHY[connection] ?? 'Voice chat is not available.'),
       { assertive: true, dedupeKey: 'voice-status' },
     );
-  });
+  }, [connection, micOn, toggleMic]);
+}
+
+/**
+ * Alt+M: mute or unmute, from anywhere in the game.
+ *
+ * The action is separate because the board binds a bare `M` to the same thing,
+ * and a shortcut that does something subtly different from the key next to it
+ * is worse than not having both.
+ */
+export function useMicShortcut(): void {
+  useShortcut(SHORTCUTS.toggleMic.chord, useMicToggleAction());
 }

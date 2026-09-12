@@ -9,8 +9,15 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import { cn } from '@/lib/cn';
+import { announcer, TIER } from '@/lib/a11y/Announcer';
+import { describeBoardKeys } from '@/lib/a11y/shortcuts';
+import { useNotation } from '@/lib/a11y/notation';
+import { audioManager } from '@/lib/audio/AudioManager';
 import type { Cell, LineDescriptor } from '../types';
 import { cellLabel, type BoardVariant } from '../a11y/cellLabel';
+import type { Notation } from '../a11y/boardCoords';
+import { BOARD_ACTIONS, type BoardActionName } from '../a11y/boardActions';
+import { edgeNameAt, type ArrowKey } from '../a11y/edges';
 
 /** Spacing between cells, in px. Must match the `gap` used by the grid. */
 const CELL_GAP = 4;
@@ -110,6 +117,8 @@ export interface BoardCellProps {
   hintId?: string;
   /** Roving tabindex: exactly one cell in the grid is tabbable. */
   tabbable: boolean;
+  /** The player's coordinate vocabulary. A primitive, so `memo` still holds. */
+  notation: Notation;
   /** Must be referentially stable, or memoization here is pointless. */
   onActivate: (index: number) => void;
   onFocusCell: (index: number) => void;
@@ -144,6 +153,7 @@ export const BoardCell = memo(function BoardCell({
   actionable,
   hintId,
   tabbable,
+  notation,
   onActivate,
   onFocusCell,
 }: BoardCellProps) {
@@ -165,7 +175,16 @@ export const BoardCell = memo(function BoardCell({
       tabIndex={tabbable ? 0 : -1}
       onClick={handleClick}
       onFocus={handleFocus}
-      aria-label={cellLabel({ index, size, value, variant, marked, selected, inCompletedLine })}
+      aria-label={cellLabel({
+        index,
+        size,
+        value,
+        variant,
+        marked,
+        selected,
+        inCompletedLine,
+        notation,
+      })}
       // Only offered when doing it is actually possible; an affordance you
       // cannot use is worse than none.
       aria-describedby={actionable ? hintId : undefined}
@@ -253,6 +272,10 @@ export interface BoardGridProps {
    * component's render cycle and memoization.
    */
   id?: string;
+  /** Answers a readout asked from the focused cell. See `boardActions.ts`. */
+  onBoardAction?: (action: BoardActionName, cellIndex: number) => void;
+  /** Jumps the player's microphone on and off, for the bare `M` key. */
+  onToggleMic?: () => void;
 }
 
 /**
@@ -278,8 +301,14 @@ export function BoardGrid({
   canActivate,
   cellHint,
   label,
+  onBoardAction,
+  onToggleMic,
 }: BoardGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
+
+  // Subscribed here, not in the cell: one subscription for the board rather
+  // than N², and the value reaches each cell as a primitive so `memo` holds.
+  const notation = useNotation();
   const [gridWidth, setGridWidth] = useState(0);
   const [rovingIndex, setRovingIndex] = useState(0);
   const hintId = `board-hint-${variant}`;
@@ -298,9 +327,13 @@ export function BoardGrid({
    * countdown tick. (The mobile board learned this the hard way.)
    */
   const pressRef = useRef(onCellPress);
+  const actionRef = useRef(onBoardAction);
+  const micRef = useRef(onToggleMic);
   const cellsRef = useRef(cells);
   useEffect(() => {
     pressRef.current = onCellPress;
+    actionRef.current = onBoardAction;
+    micRef.current = onToggleMic;
     cellsRef.current = cells;
   });
 
@@ -336,6 +369,41 @@ export function BoardGrid({
       ?.focus();
   }, []);
 
+  /**
+   * The single letters, handled here rather than through `useShortcut`.
+   *
+   * They are consumed inside the grid, which is the only place they are safe:
+   * a bare `R` bound on `document` would fire while a screen-reader user was
+   * reading the page in browse mode, where `R` is their own quick-nav key.
+   * Inside a `role="grid"` both NVDA and JAWS switch to focus mode and hand
+   * every key straight to the page.
+   */
+  const handleLetter = useCallback(
+    (key: string): boolean => {
+      const action = BOARD_ACTIONS.find(spec => spec.key === key);
+      if (action) {
+        actionRef.current?.(action.name, activeIndex);
+        return true;
+      }
+      if (key === 'B') {
+        // A fixed landmark to navigate from. The round trip in and out of the
+        // board stays on Alt+B, which is reachable from outside it.
+        moveFocus(0);
+        return true;
+      }
+      if (key === 'M') {
+        micRef.current?.();
+        return true;
+      }
+      if (key === '?') {
+        announcer.speak(describeBoardKeys(), TIER.summary);
+        return true;
+      }
+      return false;
+    },
+    [activeIndex, moveFocus],
+  );
+
   const onKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
       const row = Math.floor(activeIndex / size);
@@ -361,16 +429,36 @@ export function BoardGrid({
         case 'End':
           next = event.ctrlKey ? size * size - 1 : row * size + (size - 1);
           break;
-        default:
+        default: {
+          // Chords belong to the browser, the screen reader, and the global
+          // bindings in `SHORTCUTS` — only the bare key is ours.
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
+          if (!handleLetter(event.key.toUpperCase())) return;
+          event.preventDefault();
           return;
+        }
       }
 
-      // At an edge there is nowhere to go — swallow the key anyway, so the
-      // arrow does not scroll the page out from under the player.
+      if (next === null) {
+        // Nowhere to go. The key is still swallowed, so the arrow does not
+        // scroll the page out from under the player — but saying nothing at
+        // all was indistinguishable from a dropped keypress, and the usual
+        // response to that is to press harder and lose your place.
+        const edge = edgeNameAt(activeIndex, size, event.key as ArrowKey);
+        if (edge) {
+          announcer.speak(edge, TIER.interrupt);
+          // No `edge_bump` clip exists yet (see docs/audio-report.md); this is
+          // the nearest cue in the registry rather than a new asset.
+          audioManager.play('board_invalid');
+        }
+        event.preventDefault();
+        return;
+      }
+
       event.preventDefault();
-      if (next !== null) moveFocus(next);
+      moveFocus(next);
     },
-    [activeIndex, size, moveFocus],
+    [activeIndex, size, moveFocus, handleLetter],
   );
 
   // Membership is looked up per cell, so flatten the lines once rather than
@@ -436,6 +524,7 @@ export function BoardGrid({
                 }
                 hintId={hintId}
                 tabbable={cell.index === activeIndex}
+                notation={notation}
                 onActivate={handleActivate}
                 onFocusCell={handleFocusCell}
               />

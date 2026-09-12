@@ -16,7 +16,7 @@
  * sections are identical; the controls sections deliberately are not, because
  * the two platforms are genuinely operated differently.
  */
-import { SHORTCUTS } from '@/lib/a11y/shortcuts';
+import { BOARD_KEYS, SHORTCUTS } from '@/lib/a11y/shortcuts';
 
 export interface GuideItem {
   /** Optional lead-in, e.g. a key or a gesture. Rendered in bold. */
@@ -50,7 +50,7 @@ export const WEB_CONTROL_SECTIONS: GuideSection[] = [
       { term: SHORTCUTS.toggleMic.keys, text: SHORTCUTS.toggleMic.description },
       { term: SHORTCUTS.exitGame.keys, text: SHORTCUTS.exitGame.description },
       {
-        text: 'They are combinations rather than single letters on purpose: screen readers claim bare letters like B and M for their own navigation, so a plain letter would never reach the game.',
+        text: 'These are combinations rather than single letters on purpose: away from the board, screen readers claim bare letters like B and M for their own navigation, so a plain letter would never reach the game.',
       },
     ],
   },
@@ -74,6 +74,24 @@ export const WEB_CONTROL_SECTIONS: GuideSection[] = [
     ],
   },
   {
+    id: 'board-questions',
+    title: 'Asking the board a question',
+    intro:
+      'While the board has focus, single letters work. Four of the six answer about the cell you are on, so the answer follows your cursor.',
+    items: [
+      ...BOARD_KEYS.map(spec => ({ term: spec.keys, text: spec.description })),
+      {
+        text: 'Single letters are safe here and nowhere else: the board is a grid, and screen readers switch to focus mode inside one and hand every key straight to the page.',
+      },
+      {
+        text: 'They exist to close a gap. A sighted player spots at a glance that a row needs one more number — these say it out loud, so that is not an advantage you have to give up.',
+      },
+      {
+        text: 'You are also told without asking, as soon as any of your lines comes down to a single cell.',
+      },
+    ],
+  },
+  {
     id: 'screen-reader-web',
     title: 'Using a screen reader',
     items: [
@@ -81,10 +99,16 @@ export const WEB_CONTROL_SECTIONS: GuideSection[] = [
         text: 'The board is a grid, so your screen reader’s table or grid commands work on it as well as the arrow keys do.',
       },
       {
-        text: 'Each cell says where it is, what it holds and its state — for example “R2, C3, 41, not marked”. Cells on a diagonal say so, because those are lines you cannot work out from the row and column alone.',
+        text: 'Each cell says where it is, what it holds and its state — for example “B2, 41, not marked”. Cells on a diagonal say so, because those are lines you cannot work out from the coordinate alone.',
+      },
+      {
+        text: 'Cells are named like a chess board: a column letter, then a row number, counting from the top left. Settings can switch this to “R2, C2” if you prefer to hear the axes named.',
       },
       {
         text: 'A cell in a finished line adds “part of a completed line”.',
+      },
+      {
+        text: 'An arrow key that runs off the board names the edge you are against — “Top left edge” — rather than doing nothing, which is indistinguishable from a key that did not register.',
       },
       {
         text: 'Nothing is ever disabled to stop you pressing it. A move that cannot be made is announced instead — silence would be invisible.',
@@ -294,7 +318,15 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       },
       {
         term: 'Spoken updates',
-        text: 'Game events announced aloud for screen readers.',
+        text: 'Game events announced as they happen.',
+      },
+      {
+        term: 'Speak aloud',
+        text: 'Has the game read updates in its own voice, with no screen reader needed. Leave it off if you use one — it would read everything twice.',
+      },
+      {
+        term: 'Board coordinates',
+        text: 'Switches between “B2” and “R2, C2”.',
       },
       {
         term: 'Vibration',
@@ -305,6 +337,9 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       },
       {
         text: 'Screen-entry announcements and “that did not work” messages are always spoken, even with spoken updates off — they are how you find your way around, not commentary.',
+      },
+      {
+        text: 'Moving between cells cuts off whatever was being said, so exploring the board quickly never leaves you waiting on an old announcement.',
       },
     ],
   },

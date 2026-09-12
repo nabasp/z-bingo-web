@@ -5,7 +5,7 @@
  */
 
 import type { SoundKey } from '@/lib/audio/soundRegistry';
-import type { RoomSnapshot } from '../types/events';
+import type { RoomSnapshot, TurnChangeReason } from '../types/events';
 import { completedLines, toCells } from '../utils';
 
 export interface AudioEvent {
@@ -48,10 +48,24 @@ function seatOf(snapshot: RoomSnapshot, myId: string | undefined): number | null
  * sites instead: `room_created` (`useCreateRoom`), `board_shuffled` and
  * `board_submitted` (`useBoardSetup`).
  */
+export interface AudioContext {
+  /**
+   * The `reason` from the server's own `turn_changed`, when one arrived with
+   * this snapshot.
+   *
+   * The inference below is a good guess and nothing more — the server has
+   * always said outright why a turn moved, and nobody was listening. When this
+   * is present it is believed; when it is not, the guess stands, so an older
+   * server or a dropped event degrades rather than breaks.
+   */
+  turnChangeReason?: TurnChangeReason;
+}
+
 export function deriveAudioEvents(
   prev: RoomSnapshot | null,
   next: RoomSnapshot | null,
   myId: string | undefined,
+  { turnChangeReason }: AudioContext = {},
 ): AudioEvent[] {
   if (!next) return [];
 
@@ -186,7 +200,9 @@ export function deriveAudioEvents(
   // server's turn timer firing. The snapshot carries no `reason`, so this is
   // inferred — but those are the only three ways a turn can move.
   const timedOut =
-    stillPlaying && turnMoved && !callWasMade && !someoneLeft && !someoneJoined;
+    turnChangeReason !== undefined
+      ? stillPlaying && turnMoved && turnChangeReason === 'timeout'
+      : stillPlaying && turnMoved && !callWasMade && !someoneLeft && !someoneJoined;
   if (timedOut) events.push({ key: 'turn_timeout' });
 
   const mySeat = seatOf(next, myId);

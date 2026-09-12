@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SHORTCUTS } from '@/lib/a11y/shortcuts';
+import { BOARD_KEYS, SHORTCUTS } from '@/lib/a11y/shortcuts';
 import { HelpButton } from '@/features/guide/HelpButton';
 import { GuidePage } from './GuidePage';
 
@@ -76,7 +76,18 @@ describe('GuidePage content matches the app', () => {
 
     for (const spec of Object.values(SHORTCUTS)) {
       expect(screen.getByText(spec.keys)).toBeInTheDocument();
-      expect(screen.getByText(spec.description)).toBeInTheDocument();
+      // `getAllBy`, not `getBy`: Alt+M and the board's bare M do the same
+      // thing and say so in the same words, which is the point of them.
+      expect(screen.getAllByText(spec.description).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('lists every key the board answers', () => {
+    renderGuide();
+
+    for (const spec of BOARD_KEYS) {
+      expect(screen.getAllByText(spec.keys).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(spec.description).length).toBeGreaterThan(0);
     }
   });
 

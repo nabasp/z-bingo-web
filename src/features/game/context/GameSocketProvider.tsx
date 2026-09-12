@@ -39,6 +39,7 @@ import type {
   RoomClosedPayload,
   RoomSnapshot,
   ServerToClientEvents,
+  TurnChangeReason,
   WinnerDeclaredPayload,
 } from '../types/events';
 
@@ -100,6 +101,8 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
   const lastRoomRef = useRef<RoomSnapshot | null>(null);
   const [notice, setNotice] = useState<RoomClosedPayload | null>(null);
   const [winner, setWinner] = useState<WinnerDeclaredPayload | null>(null);
+  const [turnChangeReason, setTurnChangeReason] =
+    useState<TurnChangeReason | null>(null);
   const [rematchOffer, setRematchOffer] = useState<RematchOfferPayload | null>(null);
 
   useEffect(() => {
@@ -182,6 +185,12 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       applySnapshot(snapshot);
     });
     socket.on('winner_declared', payload => setWinner(payload));
+
+    // The server has always said why a turn moved; until now nobody listened,
+    // and the feedback layer guessed from the shape of the snapshot instead.
+    // Recorded as state so it reaches `useGameFeedback` alongside the snapshot
+    // it belongs to — the two arrive in the same tick and are batched together.
+    socket.on('turn_changed', payload => setTurnChangeReason(payload.reason));
 
     // Somebody wants another round. The prompt this raises is the only place
     // a player is asked, so it is cleared by the server resolving the offer
@@ -419,6 +428,7 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       notice,
       winner,
       me,
+      turnChangeReason,
       isHost: Boolean(room && user?.id && room.hostId === user.id),
       isMyTurn: Boolean(me && room && me.seat === room.currentTurnSeat),
       clearError: () => setError(null),
@@ -446,6 +456,7 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       notice,
       winner,
       me,
+      turnChangeReason,
       user?.id,
       on,
       request,

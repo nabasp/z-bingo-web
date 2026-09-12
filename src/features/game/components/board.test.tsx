@@ -1,7 +1,17 @@
-import { cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Cell } from '../types';
 import { BingoHeaderRow, BoardGrid } from './board';
+import { setNotation } from '@/lib/a11y/notation';
+import { announcer } from '@/lib/a11y/Announcer';
 
 /**
  * The board's keyboard contract.
@@ -24,9 +34,15 @@ function board(size: number): Cell[] {
   }));
 }
 
-function renderBoard(size = 3) {
+function renderBoard(size = 3, props: Partial<React.ComponentProps<typeof BoardGrid>> = {}) {
   return render(
-    <BoardGrid cells={board(size)} size={size} label="Your board" onCellPress={vi.fn()} />,
+    <BoardGrid
+      cells={board(size)}
+      size={size}
+      label="Your board"
+      onCellPress={vi.fn()}
+      {...props}
+    />,
   );
 }
 
@@ -43,6 +59,17 @@ function tabbableCells(): HTMLElement[] {
   return Array.from(
     document.querySelectorAll<HTMLElement>('[role="gridcell"][tabindex="0"]'),
   );
+}
+
+/**
+ * Move focus to a cell the way a player would.
+ *
+ * Wrapped in `act` because the cell's `onFocus` is what makes it the roving
+ * target: a bare `.focus()` leaves React's state a render behind, and every
+ * key pressed afterwards is answered for whichever cell was focused before.
+ */
+function focusCell(index: number): void {
+  act(() => cell(index).focus());
 }
 
 /** Press a key on the grid and report whether the default was prevented. */
@@ -78,7 +105,7 @@ describe('BoardGrid structure', () => {
 describe('BoardGrid arrow-key navigation', () => {
   it('moves right and left along a row', () => {
     renderBoard(3);
-    cell(0).focus();
+    focusCell(0);
 
     press('ArrowRight');
     expect(cell(1)).toHaveFocus();
@@ -89,7 +116,7 @@ describe('BoardGrid arrow-key navigation', () => {
 
   it('moves down and up a column', () => {
     renderBoard(3);
-    cell(0).focus();
+    focusCell(0);
 
     press('ArrowDown');
     expect(cell(3)).toHaveFocus();
@@ -100,7 +127,7 @@ describe('BoardGrid arrow-key navigation', () => {
 
   it('keeps exactly one tabbable cell as focus moves', () => {
     renderBoard(3);
-    cell(0).focus();
+    focusCell(0);
     press('ArrowRight');
     press('ArrowDown');
 
@@ -111,7 +138,7 @@ describe('BoardGrid arrow-key navigation', () => {
 
   it('stops at the edges rather than wrapping', () => {
     renderBoard(3);
-    cell(0).focus();
+    focusCell(0);
 
     press('ArrowLeft');
     expect(cell(0)).toHaveFocus();
@@ -124,7 +151,7 @@ describe('BoardGrid arrow-key navigation', () => {
     // At an edge there is nowhere to go, but the page must not scroll out from
     // under the player — so the key is consumed regardless.
     renderBoard(3);
-    cell(0).focus();
+    focusCell(0);
 
     expect(press('ArrowLeft')).toBe(true);
     expect(press('ArrowUp')).toBe(true);
@@ -134,7 +161,7 @@ describe('BoardGrid arrow-key navigation', () => {
     // Tab, Enter and everything else must reach the browser untouched —
     // breaking that is how a grid becomes a focus trap.
     renderBoard(3);
-    cell(0).focus();
+    focusCell(0);
 
     expect(press('Tab')).toBe(false);
     expect(press('a')).toBe(false);
@@ -152,7 +179,7 @@ describe('BoardGrid Home and End', () => {
    */
   function walkToCentre() {
     renderBoard(3);
-    cell(0).focus();
+    focusCell(0);
     press('ArrowDown');
     press('ArrowRight');
     expect(cell(4)).toHaveFocus();
@@ -235,8 +262,11 @@ describe('BingoHeaderRow', () => {
   });
 
   it('says the progress out loud', () => {
-    render(<BingoHeaderRow word="GAME" earned={3} />);
-    expect(screen.getByRole('status')).toHaveAccessibleName(
+    // Scoped to what this render produced: the announcer's own hidden live
+    // region is a `role="status"` too, and it is mounted in `document.body`
+    // for the life of the suite once anything has been announced.
+    const { container } = render(<BingoHeaderRow word="GAME" earned={3} />);
+    expect(within(container).getByRole('status')).toHaveAccessibleName(
       'GAME. 3 of 4 letters complete.',
     );
   });
@@ -244,8 +274,8 @@ describe('BingoHeaderRow', () => {
   it('never claims more letters than the word has', () => {
     // A 5×5 has twelve possible lines but only five letters, so the raw count
     // can overshoot — "12 of 5 letters complete" would be nonsense.
-    render(<BingoHeaderRow word="BINGO" earned={12} />);
-    expect(screen.getByRole('status')).toHaveAccessibleName(
+    const { container } = render(<BingoHeaderRow word="BINGO" earned={12} />);
+    expect(within(container).getByRole('status')).toHaveAccessibleName(
       'BINGO. 5 of 5 letters complete.',
     );
   });
@@ -254,5 +284,138 @@ describe('BingoHeaderRow', () => {
     // The word arrives from the server, so there is a beat before it exists.
     const { container } = render(<BingoHeaderRow word="" />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('coordinate notation', () => {
+  afterEach(() => setNotation('chess'));
+
+  it('names cells like a chess board by default', () => {
+    renderBoard();
+    expect(cell(0)).toHaveAccessibleName('A1, D1, 1. not marked');
+    expect(cell(4)).toHaveAccessibleName('B2, D1, D2, 5. not marked');
+  });
+
+  it('switches every cell when the player picks row and column', () => {
+    setNotation('rowcol');
+    renderBoard();
+    expect(cell(4)).toHaveAccessibleName('R2, C2, D1, D2, 5. not marked');
+  });
+
+  it('names the diagonals either way — a coordinate cannot convey them', () => {
+    renderBoard();
+    expect(cell(4)).toHaveAccessibleName(/D1, D2/);
+    cleanup();
+    setNotation('rowcol');
+    renderBoard();
+    expect(cell(4)).toHaveAccessibleName(/D1, D2/);
+  });
+});
+
+describe('edges', () => {
+  /** What the announcer was asked to say, in order. */
+  function spoken(): string[] {
+    return speak.mock.calls.map(call => String(call[0]));
+  }
+
+  const speak = vi.spyOn(announcer, 'speak');
+
+  afterEach(() => speak.mockClear());
+
+  it('names the edge instead of going silent when a move is blocked', () => {
+    // Silence was indistinguishable from a dropped keypress, and the usual
+    // response to that is to press harder and lose your place.
+    renderBoard();
+    focusCell(0);
+    expect(press('ArrowUp')).toBe(true);
+    expect(spoken()).toContain('Top left edge');
+  });
+
+  it('names every edge a corner is against, not just the one that blocked', () => {
+    renderBoard();
+    focusCell(2);
+    press('ArrowRight');
+    expect(spoken()).toContain('Top right edge');
+
+    focusCell(6);
+    press('ArrowDown');
+    expect(spoken()).toContain('Bottom left edge');
+  });
+
+  it('names a single edge on a side', () => {
+    renderBoard();
+    focusCell(3);
+    press('ArrowLeft');
+    expect(spoken()).toContain('Left edge');
+  });
+
+  it('says nothing when the move actually happens', () => {
+    renderBoard();
+    focusCell(0);
+    press('ArrowRight');
+    expect(spoken()).toEqual([]);
+  });
+});
+
+describe('board letter keys', () => {
+  it('answers a readout from the cell the cursor is on', () => {
+    const onBoardAction = vi.fn();
+    renderBoard(3, { onBoardAction });
+    focusCell(4);
+
+    expect(press('r')).toBe(true);
+    expect(onBoardAction).toHaveBeenCalledWith('row', 4);
+
+    press('C');
+    expect(onBoardAction).toHaveBeenCalledWith('column', 4);
+  });
+
+  it('binds every readout the action table declares', () => {
+    const onBoardAction = vi.fn();
+    renderBoard(3, { onBoardAction });
+    focusCell(0);
+
+    ['P', 'R', 'C', 'D', 'X', 'S'].forEach(key => press(key));
+    expect(onBoardAction.mock.calls.map(call => call[0])).toEqual([
+      'pattern',
+      'row',
+      'column',
+      'diagonal',
+      'antiDiagonal',
+      'scores',
+    ]);
+  });
+
+  it('sends B to A1, a fixed landmark to navigate from', () => {
+    renderBoard();
+    focusCell(8);
+    expect(press('b')).toBe(true);
+    expect(document.activeElement).toBe(cell(0));
+  });
+
+  it('toggles the mic on M', () => {
+    const onToggleMic = vi.fn();
+    renderBoard(3, { onToggleMic });
+    focusCell(0);
+    press('M');
+    expect(onToggleMic).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves chords alone — they belong to the browser and the screen reader', () => {
+    const onBoardAction = vi.fn();
+    renderBoard(3, { onBoardAction });
+    focusCell(4);
+
+    expect(press('r', { ctrlKey: true })).toBe(false);
+    expect(press('p', { metaKey: true })).toBe(false);
+    // Alt+B is the global round-trip binding, not ours to swallow.
+    expect(press('b', { altKey: true })).toBe(false);
+    expect(onBoardAction).not.toHaveBeenCalled();
+  });
+
+  it('ignores a letter it does not bind, so typing elsewhere is unaffected', () => {
+    renderBoard();
+    focusCell(0);
+    expect(press('z')).toBe(false);
   });
 });

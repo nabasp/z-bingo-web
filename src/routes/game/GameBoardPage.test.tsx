@@ -65,6 +65,8 @@ vi.mock('@/features/game/hooks', async importOriginal => {
 vi.mock('@/features/voice', () => ({
   VoiceBanner: () => null,
   VoiceButton: () => <button type="button">Mic On</button>,
+  // The board binds a bare `M` to this; the real one needs a VoiceProvider.
+  useMicToggleAction: () => () => {},
 }));
 
 const { GameBoardPage } = await import('./GameBoardPage');

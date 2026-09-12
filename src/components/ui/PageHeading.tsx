@@ -10,8 +10,13 @@ export interface PageHeadingProps {
    * focus lands here rather than staying on a control from the previous page.
    */
   headingRef?: Ref<HTMLHeadingElement>;
-  /** `h1` for the page title, `h2` for a section within it. */
-  level?: 1 | 2;
+  /**
+   * `h1` for the page title, `h2` for a section within it, `h3` for a
+   * subsection of that. Real levels, in order — skipping one, or reusing `h2`
+   * for something nested inside an `h2`, breaks the outline a screen reader
+   * navigates by.
+   */
+  level?: 1 | 2 | 3;
   className?: string;
 }
 
@@ -32,7 +37,7 @@ export function PageHeading({
   level = 1,
   className,
 }: PageHeadingProps) {
-  const Tag = level === 1 ? 'h1' : 'h2';
+  const Tag = (`h${level}` as const) satisfies 'h1' | 'h2' | 'h3';
 
   return (
     <div
@@ -46,7 +51,11 @@ export function PageHeading({
         tabIndex={-1}
         className={cn(
           'font-bold text-foreground outline-none',
-          level === 1 ? 'text-2xl' : 'text-xl font-semibold',
+          level === 1
+            ? 'text-2xl'
+            : level === 2
+              ? 'text-xl font-semibold'
+              : 'text-base font-semibold',
         )}>
         {title}
       </Tag>

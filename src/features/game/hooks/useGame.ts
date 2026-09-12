@@ -55,6 +55,13 @@ export function useGame() {
     [room, user?.id],
   );
 
+  /**
+   * The server's own player records, as opposed to the `Player[]` above that
+   * the UI components take. The spoken score readout wants `seat` and
+   * `letters`, neither of which survives the trip through `toUiPlayer`.
+   */
+  const seatedPlayers = useMemo(() => room?.players ?? [], [room]);
+
   const currentPlayer = useMemo(
     () => room?.players.find(p => p.seat === room.currentTurnSeat) ?? null,
     [room],
@@ -92,6 +99,7 @@ export function useGame() {
     board,
     completedLines: lines,
     players,
+    seatedPlayers,
     progress,
     announcement,
     currentPlayer,

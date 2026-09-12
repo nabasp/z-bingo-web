@@ -1,3 +1,4 @@
+export * from './useBoardReadouts';
 export * from './useBoardSetup';
 export * from './useCreateRoom';
 export * from './useBoardFocusShortcut';

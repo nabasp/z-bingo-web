@@ -15,7 +15,7 @@ import {
   ConnectionBanner,
 } from '@/features/game/components';
 import { useGameSocket } from '@/features/game/context';
-import { useBoardFocusShortcut, useBoardSetup } from '@/features/game/hooks';
+import { useBoardFocusShortcut, useBoardReadouts, useBoardSetup } from '@/features/game/hooks';
 import { BOARD_GRID_ID } from '@/features/game/constants';
 import type { BoardSize } from '@/features/game/types';
 import { PATHS } from '../paths';
@@ -44,7 +44,11 @@ const KEYBOARD_HELP =
   `Choose a filled cell to clear it. ` +
   `Move between cells with the arrow keys. ` +
   `Press ${SHORTCUTS.focusBoard.spoken} to jump to the board and back, ` +
-  `${SHORTCUTS.toggleMic.spoken} to mute or unmute.`;
+  `${SHORTCUTS.toggleMic.spoken} to mute or unmute. ` +
+  // Laying out a board you cannot see is the one place reading the whole thing
+  // back matters most, so P is named here rather than left to be discovered.
+  `On the board, press P to hear the whole board read back, or ? for the rest ` +
+  `of the keys.`;
 
 export function BoardSetupPage() {
   const { room, error, connection, leaveRoom } = useGameSocket();
@@ -81,6 +85,21 @@ export function BoardSetupPage() {
     submit,
   } = useBoardSetup(size);
 
+  /**
+   * The same readouts as during play, minus the ones that mean nothing yet.
+   *
+   * Laying out a board by ear is the hardest part of the game to do blind —
+   * you are building an arrangement you cannot see and will have to navigate
+   * from memory. Being able to ask for the whole board back is what makes that
+   * checkable before it is locked in.
+   */
+  const onBoardAction = useBoardReadouts({
+    cells,
+    size,
+    players: room?.players ?? [],
+    myId: undefined,
+  });
+
   return (
     <PageShell>
       <PageHeading
@@ -113,6 +132,7 @@ export function BoardSetupPage() {
           onCellPress={onCellPress}
           canActivate={!submitted}
           cellHint={CELL_HINT}
+          onBoardAction={onBoardAction}
         />
       </div>
 

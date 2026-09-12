@@ -1,13 +1,13 @@
-/**
- * Ported verbatim from the React Native app: `bingo/src/features/game/a11y/cellLabel.ts`.
- * Pure logic — no React Native, no DOM. Keep the two copies in sync;
- * the mobile file is the original.
- */
-
-// Imported from the module rather than the `@/src/lib` barrel on purpose: the
+// Imported from the module rather than the `@/lib` barrel on purpose: the
 // barrel reaches AudioManager and its native player, which would drag a native
 // dependency into what is otherwise pure, directly testable logic.
 import { sentence } from '@/lib/a11y/phrases';
+import {
+  coordOf,
+  onAntiDiagonal,
+  onMainDiagonal,
+  type Notation,
+} from './boardCoords';
 
 /**
  * The spoken name of a single board cell.
@@ -20,40 +20,42 @@ import { sentence } from '@/lib/a11y/phrases';
  * Pure on purpose — no React, no native module, no `Cell` objects — so the
  * wording is directly unit-testable, and so `BoardCell` can build its own label
  * inside its `memo` boundary instead of receiving N² strings from the parent.
+ * `notation` arrives the same way, as a primitive prop, rather than being read
+ * from the preference store in here: a store read would make this impure and
+ * would move the subscription inside the memo boundary, where it would defeat
+ * it.
  */
+
+// Re-exported so the geometry helpers keep their long-standing import path.
+// `boardCoords` is where they live now, because the line and board readouts
+// need them too and must not import the cell label to get them.
+export {
+  columnOf,
+  onAntiDiagonal,
+  onMainDiagonal,
+  rowOf,
+  type Notation,
+} from './boardCoords';
 
 /** Play marks cells; setup swaps them. The two never share a vocabulary. */
 export type BoardVariant = 'play' | 'setup';
 
-export function rowOf(index: number, size: number): number {
-  return Math.floor(index / size);
-}
-
-export function columnOf(index: number, size: number): number {
-  return index % size;
-}
-
-/** Top-left to bottom-right. */
-export function onMainDiagonal(index: number, size: number): boolean {
-  return rowOf(index, size) === columnOf(index, size);
-}
-
-/** Top-right to bottom-left. */
-export function onAntiDiagonal(index: number, size: number): boolean {
-  return rowOf(index, size) + columnOf(index, size) === size - 1;
-}
-
 /**
- * Where the cell sits, e.g. `R2, C2` — or `R2, C2, D1, D2` for the centre of an
- * odd board, which is on both diagonals at once.
+ * Where the cell sits — `B2` in chess notation, `R2, C2` in the other — plus
+ * `D1`/`D2` when it is on a diagonal, and both for the centre of an odd board.
  *
  * Abbreviated because this is heard on *every* swipe across N² cells; "Row two,
  * column two" spent most of its breath on two words that never change. The
- * diagonals are named only when the cell is actually on one: they are the two
- * winnable lines a player cannot infer from the row and column alone.
+ * diagonals are named even under chess notation, where the coordinate is
+ * shorter still: they are the two winnable lines a player cannot infer from the
+ * row and column alone, and that is as true of `B2` as it was of `R2, C2`.
  */
-export function positionOf(index: number, size: number): string {
-  const parts = [`R${rowOf(index, size) + 1}`, `C${columnOf(index, size) + 1}`];
+export function positionOf(
+  index: number,
+  size: number,
+  notation: Notation = 'rowcol',
+): string {
+  const parts = [coordOf(index, size, notation)];
   if (onMainDiagonal(index, size)) parts.push('D1');
   if (onAntiDiagonal(index, size)) parts.push('D2');
   return parts.join(', ');
@@ -69,6 +71,8 @@ export interface CellLabelOptions {
   /** Setup only: this cell is the pending swap pick. Ignored during play. */
   selected: boolean;
   inCompletedLine: boolean;
+  /** The player's choice of coordinate vocabulary. */
+  notation?: Notation;
 }
 
 export function cellLabel({
@@ -79,8 +83,9 @@ export function cellLabel({
   marked,
   selected,
   inCompletedLine,
+  notation = 'rowcol',
 }: CellLabelOptions): string {
-  const position = positionOf(index, size);
+  const position = positionOf(index, size, notation);
 
   if (value === null) return `${position}, empty`;
 

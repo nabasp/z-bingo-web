@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Banner, Button, ConfirmDialog, PageShell } from '@/components/ui';
-import { announcer } from '@/lib/a11y/Announcer';
+import { announcer, TIER } from '@/lib/a11y/Announcer';
 import { haptic } from '@/lib/a11y/haptics';
-import { SHORTCUTS } from '@/lib/a11y/shortcuts';
+import { getNotation } from '@/lib/a11y/notation';
+import { BOARD_KEYS, SHORTCUTS } from '@/lib/a11y/shortcuts';
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
 import { useShortcut } from '@/lib/a11y/useShortcut';
 import { audioManager } from '@/lib/audio/AudioManager';
@@ -18,8 +19,13 @@ import {
   RecentNumbers,
 } from '@/features/game/components';
 import { useGameSocket } from '@/features/game/context';
-import { VoiceBanner, VoiceButton } from '@/features/voice';
-import { useBoardFocusShortcut, useGame } from '@/features/game/hooks';
+import { useMicToggleAction, VoiceBanner, VoiceButton } from '@/features/voice';
+import {
+  useBoardFocusShortcut,
+  useBoardReadouts,
+  useGame,
+} from '@/features/game/hooks';
+import { coordOf } from '@/features/game/a11y/boardCoords';
 import { BOARD_GRID_ID } from '@/features/game/constants';
 import type { Cell } from '@/features/game/types';
 import { PATHS } from '../paths';
@@ -39,7 +45,12 @@ const KEYBOARD_HELP =
   `Move between cells with the arrow keys and press Enter on a number to call it. ` +
   `Press ${SHORTCUTS.focusBoard.spoken} to jump to the board and back, ` +
   `${SHORTCUTS.toggleMic.spoken} to mute or unmute, ` +
-  `${SHORTCUTS.exitGame.spoken} to leave the game.`;
+  `${SHORTCUTS.exitGame.spoken} to leave the game. ` +
+  // Built from the same table the grid binds from, so the help cannot name a
+  // key the board does not answer.
+  `On the board, single keys ask it questions: ${BOARD_KEYS.map(
+    spec => `${spec.spoken} for ${spec.description.replace(/\.$/, '')}`,
+  ).join(', ')}.`;
 
 export function GameBoardPage() {
   const navigate = useNavigate();
@@ -47,6 +58,8 @@ export function GameBoardPage() {
   const {
     board,
     completedLines,
+    seatedPlayers,
+    me,
     progress,
     announcement,
     currentPlayer,
@@ -94,9 +107,28 @@ export function GameBoardPage() {
       }
 
       callNumber(cell.value);
+      // Said here rather than waiting for the server's snapshot to echo back:
+      // a confirmation that arrives a round trip late reads as lag, and the
+      // player has usually moved on. The echo carries the same `dedupeKey`, so
+      // whichever lands second is dropped and the number is never said twice.
+      announcer.speak(
+        `${coordOf(cell.index, boardSize, getNotation())}, ${cell.value} called`,
+        { ...TIER.interrupt, dedupeKey: `called:${cell.value}`, dedupeMs: 4000 },
+      );
     },
-    [isMyTurn, callNumber],
+    [isMyTurn, callNumber, boardSize],
   );
+
+  /** Answers P / R / C / D / X / S, asked from the focused cell. */
+  const onBoardAction = useBoardReadouts({
+    cells: board,
+    size: boardSize,
+    players: seatedPlayers,
+    myId: me?.id,
+  });
+
+  // The bare `M` inside the grid, doing exactly what Alt+M does outside it.
+  const onToggleMic = useMicToggleAction();
 
   const toggleSfx = useCallback(() => audioManager.toggleChannel('sfx'), []);
 
@@ -172,6 +204,8 @@ export function GameBoardPage() {
               onCellPress={onCellPress}
               canActivate={isMyTurn}
               cellHint={CELL_HINT}
+              onBoardAction={onBoardAction}
+              onToggleMic={onToggleMic}
             />
           </div>
 

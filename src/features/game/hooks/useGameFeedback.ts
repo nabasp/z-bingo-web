@@ -5,6 +5,7 @@
 
 import { useEffect, useRef } from 'react';
 import { announcer } from '@/lib/a11y/Announcer';
+import { getNotation } from '@/lib/a11y/notation';
 import { haptic } from '@/lib/a11y/haptics';
 import { audioManager } from '@/lib/audio/AudioManager';
 import { useAuth } from '@/features/auth/context';
@@ -38,14 +39,22 @@ const HAPTICS: Partial<Record<SoundKey, Parameters<typeof haptic>[0]>> = {
  */
 export function useGameFeedback(): void {
   const { user } = useAuth();
-  const { room } = useGameSocket();
+  const { room, turnChangeReason } = useGameSocket();
   const previous = useRef<RoomSnapshot | null>(null);
 
   useEffect(() => {
     const prev = previous.current;
-    const audioEvents = deriveAudioEvents(prev, room, user?.id);
+    const audioEvents = deriveAudioEvents(prev, room, user?.id, {
+      // The server's own word on why the turn moved, in place of inferring it
+      // from the shape of the snapshot.
+      turnChangeReason: turnChangeReason ?? undefined,
+    });
     const speechEvents = deriveSpeechEvents(prev, room, user?.id, {
       audioEvents,
+      // Read here rather than subscribed to: this bridge renders nothing, so a
+      // subscription would only add a re-render, and the value is read fresh on
+      // every snapshot anyway.
+      notation: getNotation(),
     });
     previous.current = room;
 
@@ -67,5 +76,5 @@ export function useGameFeedback(): void {
         });
       }
     }
-  }, [room, user?.id]);
+  }, [room, user?.id, turnChangeReason]);
 }
