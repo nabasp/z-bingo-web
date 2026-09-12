@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Cell } from '../types';
 import {
+  fillRemainingCells,
   initials,
   isBoardComplete,
   makeEmptyBoard,
@@ -163,5 +164,74 @@ describe('initials', () => {
   it('is empty for an empty name rather than throwing', () => {
     expect(initials('')).toBe('');
     expect(initials('   ')).toBe('');
+  });
+});
+
+describe('fillRemainingCells', () => {
+  const SIZE = 3 as const;
+
+  it('completes an empty board with every number exactly once', () => {
+    const filled = fillRemainingCells(makeEmptyBoard(SIZE), SIZE);
+    expect(filled.map(c => c.value).sort((a, b) => a! - b!)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9,
+    ]);
+  });
+
+  /**
+   * The whole reason it fills rather than deals: a player who placed the few
+   * cells they cared about must keep them exactly where they put them.
+   */
+  it('leaves the numbers already placed exactly where they are', () => {
+    const board = makeEmptyBoard(SIZE);
+    board[4] = { ...board[4], value: 1 };
+    board[0] = { ...board[0], value: 7 };
+
+    const filled = fillRemainingCells(board, SIZE);
+
+    expect(filled[4].value).toBe(1);
+    expect(filled[0].value).toBe(7);
+  });
+
+  it('fills only the empty cells, and fills all of them', () => {
+    const board = makeEmptyBoard(SIZE);
+    board[2] = { ...board[2], value: 5 };
+
+    const filled = fillRemainingCells(board, SIZE);
+
+    expect(filled.every(c => c.value !== null)).toBe(true);
+    expect(new Set(filled.map(c => c.value)).size).toBe(9);
+  });
+
+  it('never invents a duplicate', () => {
+    for (let run = 0; run < 30; run++) {
+      const values = fillRemainingCells(makeEmptyBoard(4), 4).map(c => c.value);
+      expect(new Set(values).size).toBe(16);
+    }
+  });
+
+  it('is a no-op on a board that is already full', () => {
+    const full = fillRemainingCells(makeEmptyBoard(SIZE), SIZE);
+    expect(fillRemainingCells(full, SIZE).map(c => c.value)).toEqual(
+      full.map(c => c.value),
+    );
+  });
+
+  it('places the missing numbers in the order the rng gives', () => {
+    // Injectable so this asserts the arrangement rather than hoping for one.
+    const board = makeEmptyBoard(SIZE);
+    const filled = fillRemainingCells(board, SIZE, () => 0);
+    expect(filled.map(c => c.value)).toHaveLength(9);
+    expect(new Set(filled.map(c => c.value)).size).toBe(9);
+  });
+
+  it('varies between runs, so it is not a fixed layout', () => {
+    const seen = new Set(
+      Array.from({ length: 20 }, () =>
+        fillRemainingCells(makeEmptyBoard(4), 4)
+          .map(c => c.value)
+          .join(','),
+      ),
+    );
+    expect(seen.size).toBeGreaterThan(1);
   });
 });

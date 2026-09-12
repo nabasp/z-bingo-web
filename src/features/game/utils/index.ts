@@ -184,6 +184,45 @@ export function shuffleFilledCells(
   return next;
 }
 
+/**
+ * Drop every number still missing into the cells still empty, at random.
+ *
+ * Conservative in the same way `shuffleFilledCells` is: it never moves a number
+ * the player has already placed, and never invents one. On a part-filled board
+ * it completes the arrangement around what is already there, so a player who
+ * placed the few cells they cared about keeps them exactly where they put them.
+ *
+ * This exists because laying a board out by hand is the point on a 3×3 and a
+ * chore on an 8×8 — sixty-four deliberate presses, which for a screen-reader
+ * user is sixty-four swipes as well. Filling the rest is the escape hatch, not
+ * the default: the board still starts empty.
+ *
+ * `rng` is injectable so tests can assert the arrangement rather than hope.
+ */
+export function fillRemainingCells(
+  cells: Cell[],
+  size: BoardSize,
+  rng: () => number = Math.random,
+): Cell[] {
+  const used = new Set(
+    cells.map(cell => cell.value).filter((v): v is number => v !== null),
+  );
+  const missing: number[] = [];
+  for (let value = 1; value <= size * size; value++) {
+    if (!used.has(value)) missing.push(value);
+  }
+
+  for (let i = missing.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [missing[i], missing[j]] = [missing[j], missing[i]];
+  }
+
+  let next = 0;
+  return cells.map(cell =>
+    cell.value === null ? { ...cell, value: missing[next++] ?? null } : cell,
+  );
+}
+
 /** An empty board of `size²` cells. */
 export function makeEmptyBoard(size: BoardSize): Cell[] {
   return Array.from({ length: size * size }, (_, index) => ({

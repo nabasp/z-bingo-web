@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { audioManager } from '@/lib/audio/AudioManager';
 import type { BoardSize, Cell } from '../types';
 import {
+  fillRemainingCells,
   isBoardComplete,
   makeEmptyBoard,
   nextAvailableNumber,
@@ -25,8 +26,14 @@ import { useGameSocket } from '../context';
  * That pairing is the whole correction story, and it is why there is no undo
  * button: because the next number is always the lowest one missing, clearing a
  * cell and choosing another moves a number, and no sequence of presses can
- * produce a duplicate or a gap in the final board. The old Random Fill and
- * Reset are gone — an automatically generated board defeated the point.
+ * produce a duplicate or a gap in the final board.
+ *
+ * `fillRandom` is the one concession to effort. Placing every cell by hand is
+ * the point on a 3×3 and a chore on an 8×8 — sixty-four deliberate presses, and
+ * as many swipes for a screen-reader user. It fills *around* what is already
+ * placed rather than dealing a fresh board, so it stays an escape hatch rather
+ * than a replacement for laying one out: the board still starts empty, and
+ * nothing the player chose is moved.
  *
  * The server still deals a board on join; it is deliberately ignored here, and
  * whatever is submitted replaces it. The server re-validates on submit
@@ -61,6 +68,16 @@ export function useBoardSetup(size: BoardSize) {
   // these cues are played here rather than by the snapshot bridge.
   const shuffle = () => {
     setCells(prev => shuffleFilledCells(prev));
+    audioManager.play('board_shuffled');
+  };
+
+  /** Drop the remaining numbers into the remaining cells, at random. */
+  const fillRandom = () => {
+    if (submitted || isComplete) {
+      audioManager.play('board_invalid');
+      return;
+    }
+    setCells(prev => fillRemainingCells(prev, size));
     audioManager.play('board_shuffled');
   };
 
@@ -112,6 +129,7 @@ export function useBoardSetup(size: BoardSize) {
     /** How many cells still need a number. Drives the instructions. */
     remaining: cells.filter(cell => cell.value === null).length,
     shuffle,
+    fillRandom,
     onCellPress,
     isComplete,
     submitted,

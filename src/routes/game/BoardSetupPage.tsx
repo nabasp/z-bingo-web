@@ -44,6 +44,10 @@ const KEYBOARD_HELP =
   `Choose cells in any order to place the numbers 1 upwards, then choose Continue. ` +
   `Choose a filled cell to clear it. ` +
   `Move between cells with the arrow keys. ` +
+  // Worth naming up front rather than leaving to be found by Tabbing: on a
+  // large board this is the difference between four presses and sixty-four.
+  `Random Fill places the numbers you have not placed yet, leaving the ones ` +
+  `you have chosen where they are. ` +
   `Press ${SHORTCUTS.focusBoard.spoken} to jump to the board and back, ` +
   `${SHORTCUTS.toggleMic.spoken} to mute or unmute. ` +
   // Laying out a board you cannot see is the one place reading the whole thing
@@ -82,6 +86,7 @@ export function BoardSetupPage() {
     nextNumber,
     remaining,
     shuffle,
+    fillRandom,
     onCellPress,
     isComplete,
     submitted,
@@ -139,9 +144,10 @@ export function BoardSetupPage() {
         />
       </div>
 
-      <div className="mx-auto flex w-full max-w-[min(32rem,60vh)]">
-        {/* Shuffle rearranges what you have placed; it never invents a number,
-            so it is useful on a part-filled board too. */}
+      <div className="mx-auto flex w-full max-w-[min(32rem,60vh)] gap-3">
+        {/* Both rearrange rather than deal: Shuffle moves only the numbers you
+            have placed, Random Fill drops the remaining ones into the cells you
+            have left. Neither disturbs a cell you chose deliberately. */}
         <Button
           variant="outline"
           size="md"
@@ -149,6 +155,14 @@ export function BoardSetupPage() {
           disabled={submitted}
           onClick={shuffle}>
           Shuffle
+        </Button>
+        <Button
+          variant="outline"
+          size="md"
+          fullWidth
+          disabled={submitted || isComplete}
+          onClick={fillRandom}>
+          Random Fill
         </Button>
       </div>
 
