@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui';
 import { announcer, sentence } from '@/lib/a11y';
-import { useVoice } from '../context/useVoice';
+import { useOptionalVoice } from '../context/useVoice';
 import { VOICE_LABEL, VOICE_WHY } from '../voiceLabels';
 
 /**
@@ -14,7 +14,11 @@ import { VOICE_LABEL, VOICE_WHY } from '../voiceLabels';
  * pressed yet.
  */
 export function VoiceButton({ className }: { className?: string }) {
-  const { connection, micOn, toggleMic, retry } = useVoice();
+  // Null in a bot game, which mounts no voice provider — there is nobody to
+  // talk to, so there is no control to offer.
+  const voice = useOptionalVoice();
+  if (!voice) return null;
+  const { connection, micOn, toggleMic, retry } = voice;
 
   const live = connection === 'live';
   const label = live ? (micOn ? 'Mic On' : 'Mic Off') : VOICE_LABEL[connection];

@@ -19,6 +19,7 @@ import {
   RecentNumbers,
 } from '@/features/game/components';
 import { useGameSocket } from '@/features/game/context';
+import { useGameMode } from '@/features/game/mode';
 import { useMicToggleAction, VoiceBanner, VoiceButton } from '@/features/voice';
 import {
   useBoardFocusShortcut,
@@ -75,6 +76,8 @@ export function GameBoardPage() {
   } = useGame();
 
   const sfxOn = useAudioChannel('sfx');
+  // There is nothing to forfeit in a game against the bot.
+  const isBotGame = useGameMode() === 'bot';
   const [confirmingExit, setConfirmingExit] = useState(false);
 
   // Leaving mid-game is a forfeit: the server hands the remaining player a
@@ -239,7 +242,11 @@ export function GameBoardPage() {
       <ConfirmDialog
         open={confirmingExit}
         title="Leave the game?"
-        message="You will forfeit this match and the other player wins."
+        message={
+          isBotGame
+            ? 'This game will end and the board will be cleared.'
+            : 'You will forfeit this match and the other player wins.'
+        }
         confirmLabel="Leave game"
         destructive
         onConfirm={exitToHome}

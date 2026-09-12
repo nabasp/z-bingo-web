@@ -13,7 +13,7 @@ import { useGameSocket } from '../context';
 import { deriveAudioEvents } from '../audio';
 import { deriveSpeechEvents } from '../a11y/gameSpeechEvents';
 import type { SoundKey } from '@/lib/audio/soundRegistry';
-import type { RoomSnapshot } from '../types/events';
+import type { RoomSnapshot, TurnChangeReason } from '../types/events';
 
 /** Which cues are worth a buzz, and which buzz. */
 const HAPTICS: Partial<Record<SoundKey, Parameters<typeof haptic>[0]>> = {
@@ -27,29 +27,35 @@ const HAPTICS: Partial<Record<SoundKey, Parameters<typeof haptic>[0]>> = {
 };
 
 /**
- * Turns changes in the server snapshot into sound, speech and haptics.
+ * Turns changes in a room snapshot into sound, speech and haptics.
  *
  * All three come from **one** diff pass: `deriveAudioEvents` decides what
  * happened, and the speech and haptic layers read its output rather than
  * re-deriving state. That keeps them from ever disagreeing, and avoids running
  * the board scan three times per snapshot.
  *
- * Mounted exactly once, by `GameFeedbackBridge` in `App.tsx`, so cues fire
- * regardless of which screen is on top.
+ * Takes the snapshot as an argument rather than reading the socket, because
+ * this is the entire audio and accessibility spine of gameplay and Play With
+ * Bot needs it too. `GameFeedbackBridge` is a *sibling* of `RouterProvider`,
+ * not an ancestor, so a bot provider mounted inside a route can never shadow
+ * what it reads — a bot game driven through the socket-reading version would be
+ * completely silent, which for a blind player is the game not working at all.
  */
-export function useGameFeedback(): void {
-  const { user } = useAuth();
-  const { room, turnChangeReason } = useGameSocket();
+export function useSnapshotFeedback(
+  room: RoomSnapshot | null,
+  turnChangeReason: TurnChangeReason | null,
+  myId: string | undefined,
+): void {
   const previous = useRef<RoomSnapshot | null>(null);
 
   useEffect(() => {
     const prev = previous.current;
-    const audioEvents = deriveAudioEvents(prev, room, user?.id, {
+    const audioEvents = deriveAudioEvents(prev, room, myId, {
       // The server's own word on why the turn moved, in place of inferring it
       // from the shape of the snapshot.
       turnChangeReason: turnChangeReason ?? undefined,
     });
-    const speechEvents = deriveSpeechEvents(prev, room, user?.id, {
+    const speechEvents = deriveSpeechEvents(prev, room, myId, {
       audioEvents,
       // Read here rather than subscribed to: this bridge renders nothing, so a
       // subscription would only add a re-render, and the value is read fresh on
@@ -76,5 +82,18 @@ export function useGameFeedback(): void {
         });
       }
     }
-  }, [room, user?.id, turnChangeReason]);
+  }, [room, myId, turnChangeReason]);
+}
+
+/**
+ * The multiplayer mount: the same feedback, fed from the socket.
+ *
+ * Mounted exactly once, by `GameFeedbackBridge` in `App.tsx`, so cues fire
+ * regardless of which screen is on top. Stays silent whenever there is no room,
+ * which is what keeps it out of the way during a bot game.
+ */
+export function useGameFeedback(): void {
+  const { user } = useAuth();
+  const { room, turnChangeReason } = useGameSocket();
+  useSnapshotFeedback(room, turnChangeReason, user?.id);
 }

@@ -29,6 +29,13 @@ export const PATHS = {
   waiting: '/game/waiting',
   play: '/game/play',
   result: '/game/result',
+
+  // Play With Bot. A standalone single-player mode: no room is created, so
+  // these deliberately sit outside `/game` and outside the room guard.
+  bot: '/bot',
+  botBoardSetup: '/bot/board',
+  botPlay: '/bot/play',
+  botResult: '/bot/result',
 } as const;
 
 export type Path = (typeof PATHS)[keyof typeof PATHS];

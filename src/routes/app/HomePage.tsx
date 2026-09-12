@@ -24,7 +24,10 @@ export function HomePage() {
 
   const headingRef = useAnnounceOnFocus({
     title: 'Home',
-    detail: 'Create a room to host a game, or join one with a code.',
+    // Names every way in. It listed two of the three before the bot mode
+    // existed, which left the others to be found by exploring.
+    detail:
+      'Create a room to host a game, join one with a code, invite friends, or play against the bot.',
   });
 
   const firstName = (user?.fullName || '').trim().split(/\s+/)[0];
@@ -62,6 +65,13 @@ export function HomePage() {
           subtitle="Enter a room code"
           glyph="→"
           to={PATHS.joinRoom}
+        />
+        {/* No room, no code, no waiting — straight into a game. */}
+        <ActionCard
+          title="Play with Bot"
+          subtitle="A single-player game against the computer"
+          glyph="🤖"
+          to={PATHS.bot}
         />
       </div>
 

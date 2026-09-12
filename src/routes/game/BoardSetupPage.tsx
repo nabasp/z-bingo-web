@@ -15,6 +15,7 @@ import {
   ConnectionBanner,
 } from '@/features/game/components';
 import { useGameSocket } from '@/features/game/context';
+import { useGameMode } from '@/features/game/mode';
 import { useBoardFocusShortcut, useBoardReadouts, useBoardSetup } from '@/features/game/hooks';
 import { BOARD_GRID_ID } from '@/features/game/constants';
 import type { BoardSize } from '@/features/game/types';
@@ -52,6 +53,8 @@ const KEYBOARD_HELP =
 
 export function BoardSetupPage() {
   const { room, error, connection, leaveRoom } = useGameSocket();
+  // Nobody is kept waiting by a bot game, so leaving one costs something else.
+  const isBotGame = useGameMode() === 'bot';
   const navigate = useNavigate();
   const size = (room?.size ?? 5) as BoardSize;
   // The word this board spells — BUS at 3×3, GAME at 4×4, BINGO at 5×5, and so
@@ -162,7 +165,7 @@ export function BoardSetupPage() {
           fullWidth
           className="text-rose-400"
           onClick={() => setConfirmingLeave(true)}>
-          Leave Room
+          {isBotGame ? 'Leave Game' : 'Leave Room'}
         </Button>
 
         {/*
@@ -189,8 +192,12 @@ export function BoardSetupPage() {
       </div>
       <ConfirmDialog
         open={confirmingLeave}
-        title="Leave the room?"
-        message="The other players will be left waiting, and the game cannot start without you."
+        title={isBotGame ? 'Leave this game?' : 'Leave the room?'}
+        message={
+          isBotGame
+            ? 'The board you have laid out will be discarded.'
+            : 'The other players will be left waiting, and the game cannot start without you.'
+        }
         confirmLabel="Leave room"
         destructive
         onConfirm={leave}

@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { announcer, sentence, SHORTCUTS, useShortcut } from '@/lib/a11y';
-import { useVoice } from '../context/useVoice';
+import { useOptionalVoice } from '../context/useVoice';
 import { VOICE_LABEL, VOICE_WHY } from '../voiceLabels';
 
 /**
@@ -16,9 +16,22 @@ import { VOICE_LABEL, VOICE_WHY } from '../voiceLabels';
  * the announcer is part-way through saying about the turn.
  */
 export function useMicToggleAction(): () => void {
-  const { connection, micOn, toggleMic } = useVoice();
+  const voice = useOptionalVoice();
+  const connection = voice?.connection ?? 'off';
+  const micOn = voice?.micOn ?? false;
+  const toggleMic = voice?.toggleMic;
 
   return useCallback(() => {
+    // No provider at all: a bot game, where the key is not dead so much as
+    // beside the point. Say so rather than let it look broken.
+    if (!toggleMic) {
+      announcer.speak('Voice chat is not part of a game against the bot.', {
+        assertive: true,
+        dedupeKey: 'voice-status',
+      });
+      return;
+    }
+
     if (connection === 'live') {
       // `micOn` here is the value before the toggle, and `toggleMic` updates
       // optimistically — so the state being announced is the one after.

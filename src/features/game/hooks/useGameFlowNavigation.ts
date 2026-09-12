@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PATHS } from '@/routes/paths';
 import { useGameSocket } from '../context';
+import { useGameMode } from '../mode';
 
 /**
  * Drive routing from the server's room status.
@@ -20,6 +21,10 @@ export function useGameFlowNavigation(): void {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { room, me } = useGameSocket();
+  // A bot game moves through the same statuses on a shorter route set: there is
+  // no lobby to gather in and nobody to wait for. Without this, the first
+  // status change would navigate straight out of the mode.
+  const mode = useGameMode();
   const lastPath = useRef<string | null>(null);
 
   const status = room?.status;
@@ -28,20 +33,28 @@ export function useGameFlowNavigation(): void {
   useEffect(() => {
     if (!room || !status) return;
 
+    const bot = mode === 'bot';
+
     let target: string;
     switch (status) {
       case 'lobby':
+        if (bot) return;
         target = PATHS.lobby;
         break;
       case 'setup':
-        // Once your board is in, wait for everyone else.
-        target = submitted ? PATHS.waiting : PATHS.boardSetup;
+        // Once your board is in, wait for everyone else. In a bot game there is
+        // no one else — submitting starts play in the same tick.
+        target = bot
+          ? PATHS.botBoardSetup
+          : submitted
+            ? PATHS.waiting
+            : PATHS.boardSetup;
         break;
       case 'playing':
-        target = PATHS.play;
+        target = bot ? PATHS.botPlay : PATHS.play;
         break;
       case 'finished':
-        target = PATHS.result;
+        target = bot ? PATHS.botResult : PATHS.result;
         break;
       default:
         return;
@@ -55,5 +68,5 @@ export function useGameFlowNavigation(): void {
     if (pathname === target) return;
 
     navigate(target, { replace: true });
-  }, [room, status, submitted, pathname, navigate]);
+  }, [room, status, submitted, mode, pathname, navigate]);
 }

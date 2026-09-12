@@ -1,5 +1,5 @@
 import { Banner } from '@/components/ui';
-import { useVoice } from '../context/useVoice';
+import { useOptionalVoice } from '../context/useVoice';
 
 /**
  * Whatever voice chat currently needs to tell the player, or nothing.
@@ -10,7 +10,9 @@ import { useVoice } from '../context/useVoice';
  * announcer has already spoken the same sentence; this is its visible half.
  */
 export function VoiceBanner() {
-  const { message } = useVoice();
+  // Null in a bot game, which mounts no voice provider. Nothing to report.
+  const voice = useOptionalVoice();
+  const message = voice?.message;
   if (!message) return null;
   return <Banner variant="info">{message}</Banner>;
 }

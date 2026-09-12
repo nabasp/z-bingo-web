@@ -12,6 +12,8 @@ import { PlayWithFriendsPage } from './app/PlayWithFriendsPage';
 import { ProfilePage } from './app/ProfilePage';
 import { GuidePage } from './app/GuidePage';
 import { SettingsPage } from './app/SettingsPage';
+import { BotConfigLayout, BotGameLayout } from './bot/BotLayout';
+import { BotSetupPage } from './bot/BotSetupPage';
 import { BoardSetupPage } from './game/BoardSetupPage';
 import { CreateRoomPage } from './game/CreateRoomPage';
 import { GameBoardPage } from './game/GameBoardPage';
@@ -55,6 +57,28 @@ export const router = createBrowserRouter([
           { path: PATHS.guide, element: <GuidePage /> },
           { path: PATHS.friends, element: <FriendsPage /> },
           { path: PATHS.playWithFriends, element: <PlayWithFriendsPage /> },
+          {
+            /*
+             * Play With Bot: a standalone single-player mode.
+             *
+             * Outside `GameLayout` and `RequireRoom` on purpose. The first
+             * mounts `VoiceProvider` and navigates on socket snapshots, which
+             * would pull a bot game into the multiplayer flow; the second reads
+             * the real socket and would bounce a player with no room home.
+             */
+            element: <BotConfigLayout />,
+            children: [
+              { path: PATHS.bot, element: <BotSetupPage /> },
+              {
+                element: <BotGameLayout />,
+                children: [
+                  { path: PATHS.botBoardSetup, element: <BoardSetupPage /> },
+                  { path: PATHS.botPlay, element: <GameBoardPage /> },
+                  { path: PATHS.botResult, element: <ResultPage /> },
+                ],
+              },
+            ],
+          },
           {
             // Every game route shares the server-driven navigation.
             element: <GameLayout />,

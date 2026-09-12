@@ -22,10 +22,17 @@ const NAV_ITEMS = [
  * to the content. It hides on the game board, where the board should own the
  * viewport — the same reason the mobile game screen pushes over the tabs.
  */
+
+/**
+ * Pages that hide the top nav: both boards, multiplayer and bot alike. The grid
+ * wants the width, and the nav is one more thing to Tab past on the way to it.
+ */
+const BOARD_PATHS = new Set<string>([PATHS.play, PATHS.botPlay]);
+
 export function AppLayout() {
   const { pathname } = useLocation();
   const { user } = useAuth();
-  const hideNav = pathname === PATHS.play;
+  const hideNav = BOARD_PATHS.has(pathname);
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
