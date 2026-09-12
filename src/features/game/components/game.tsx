@@ -23,6 +23,10 @@ export const TurnBanner = memo(function TurnBanner({
   /** The room's turn length — turns are 1–5 minutes, chosen by the host. */
   totalSeconds?: number;
 }) {
+  // A turn length of zero means the mode is untimed — Play With Bot, which
+  // arms no deadline. "Calling a number…" is the *waiting for the clock*
+  // wording, and left standing there forever it just reads as stuck.
+  const untimed = totalSeconds === 0;
   // Turns red exactly when the warning audio starts, so the two urgency cues
   // never disagree.
   const urgent = secondsLeft !== undefined && secondsLeft <= WARNING_WINDOW_SECONDS;
@@ -46,7 +50,11 @@ export const TurnBanner = memo(function TurnBanner({
               {byName} turn
             </span>
             <span className="text-xs text-muted-foreground">
-              {secondsLeft !== undefined ? `${secondsLeft}s to call` : 'Calling a number…'}
+              {secondsLeft !== undefined
+                ? `${secondsLeft}s to call`
+                : untimed
+                  ? 'No time limit'
+                  : 'Calling a number…'}
             </span>
           </div>
         </div>

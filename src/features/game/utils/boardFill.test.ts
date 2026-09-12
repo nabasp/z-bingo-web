@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Cell } from '../types';
 import {
+  initials,
   isBoardComplete,
   makeEmptyBoard,
   nextAvailableNumber,
@@ -138,5 +139,29 @@ describe('shuffleFilledCells', () => {
   it('does nothing to an empty board', () => {
     const empty = makeEmptyBoard(3);
     expect(shuffleFilledCells(empty, () => 0.5)).toEqual(empty);
+  });
+});
+
+describe('initials', () => {
+  it('takes the first letter of up to two words', () => {
+    expect(initials('Siv Nabas')).toBe('SN');
+    expect(initials('Siv')).toBe('S');
+    expect(initials('Siv Kumar Nabas')).toBe('SK');
+  });
+
+  /**
+   * The bot is named "🤖 Bot". `charAt(0)` returns half of that emoji's
+   * surrogate pair, which rendered as a replacement glyph in its avatar — and
+   * would do the same for any player whose name starts with an astral
+   * character.
+   */
+  it('does not split an emoji in half', () => {
+    expect(initials('🤖 Bot')).toBe('🤖B');
+    expect(initials('🎲')).toBe('🎲');
+  });
+
+  it('is empty for an empty name rather than throwing', () => {
+    expect(initials('')).toBe('');
+    expect(initials('   ')).toBe('');
   });
 });

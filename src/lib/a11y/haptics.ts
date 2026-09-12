@@ -100,6 +100,12 @@ export function useHapticsEnabled(): boolean {
  */
 export function haptic(event: HapticEvent): void {
   if (!enabled || !supported()) return;
+  // Chrome refuses `vibrate()` until the document has been activated, and logs
+  // an error each time it does. A player working entirely by keyboard may never
+  // activate it, so every marked cell and completed line wrote a console error
+  // that no amount of try/catch here could swallow — the browser logs it rather
+  // than throwing. Asking first is the only way to stay quiet.
+  if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
   try {
     navigator.vibrate(PATTERNS[event]);
   } catch {

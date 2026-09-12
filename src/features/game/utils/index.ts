@@ -213,12 +213,19 @@ export function chunk<T>(items: T[], size: number): T[][] {
   return rows;
 }
 
-/** Up-to-two-letter uppercase initials from a name. */
+/**
+ * Up-to-two-letter uppercase initials from a name.
+ *
+ * Split by code point, not by UTF-16 unit: `charAt(0)` on a name beginning with
+ * an emoji or any astral character returns half a surrogate pair, which renders
+ * as a replacement glyph. The bot is named "\u{1F916} Bot", which is how this
+ * surfaced, but it was always wrong for any player whose name starts that way.
+ */
 export function initials(name: string): string {
   return name
     .trim()
     .split(/\s+/)
     .slice(0, 2)
-    .map(part => part.charAt(0).toUpperCase())
+    .map(part => [...part][0]?.toUpperCase() ?? '')
     .join('');
 }
