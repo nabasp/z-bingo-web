@@ -1,4 +1,4 @@
-import { Banner, PageHeading, PageShell, SectionLabel, TextLink } from '@/components/ui';
+import { Banner, PageHeading, PageShell, SectionLabel } from '@/components/ui';
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
 import { useAuth } from '@/features/auth/context';
 import { useGameSocket } from '@/features/game/context';
@@ -16,7 +16,7 @@ import { PATHS } from '../paths';
 const SHOW_MOCK_DATA = false;
 
 export function HomePage() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   // Home is where the route guard lands a player whose room ended without
   // them, so it is where the explanation has to be shown.
   const { notice, clearNotice } = useGameSocket();
@@ -89,10 +89,6 @@ export function HomePage() {
           </p>
         )}
       </section>
-
-      <div className="flex w-full justify-center pt-2">
-        <TextLink label="Log out" onClick={() => void logout()} />
-      </div>
     </PageShell>
   );
 }

@@ -125,10 +125,11 @@ const SPOKEN_RECENT_LIMIT = 8;
  * How many chips to render.
  *
  * The strip grows to N² entries — 64 on an 8×8 — which pushed the rest of the
- * mobile screen off. The full history is still in the label summary and on the
- * result page.
+ * mobile screen off. Twelve chips still overflowed a phone row, so it matches
+ * the spoken limit and the rest becomes a +N count. The full history is still
+ * in the label summary and on the result page.
  */
-const VISIBLE_RECENT_LIMIT = 12;
+const VISIBLE_RECENT_LIMIT = SPOKEN_RECENT_LIMIT;
 
 /** Horizontal strip of recently called numbers (newest first, highlighted). */
 export const RecentNumbers = memo(function RecentNumbers({
