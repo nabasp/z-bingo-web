@@ -1,6 +1,7 @@
 import type { ForgotPasswordValues, SignInValues, SignUpValues } from '../types';
 import {
   sendReset,
+  sendVerification,
   signInEmail,
   signInWithGoogle,
   signOutFirebase,
@@ -26,6 +27,10 @@ export const authService = {
 
   requestPasswordReset(values: ForgotPasswordValues): Promise<void> {
     return sendReset(values.email);
+  },
+
+  resendVerificationEmail(): Promise<void> {
+    return sendVerification();
   },
 
   signInWithGoogle(): Promise<void> {

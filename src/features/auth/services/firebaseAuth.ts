@@ -8,9 +8,11 @@ import {
   signInWithPopup,
   signOut,
   updateProfile,
+  type ActionCodeSettings,
   type User as FirebaseUser,
 } from 'firebase/auth';
 import { getFirebaseAuth } from '@/lib/firebase';
+import { PATHS } from '@/routes/paths';
 import type { User } from '@/types';
 
 /**
@@ -39,7 +41,29 @@ export function mapFirebaseUser(user: FirebaseUser): User {
     fullName: user.displayName ?? '',
     email: user.email ?? '',
     avatarUrl: user.photoURL ?? undefined,
+    emailVerified: user.emailVerified,
+    // `providerData`, not `providerId`: the latter is always 'firebase' on the
+    // user itself. An account can carry several providers at once once linked,
+    // and the password one is what the verification gate is about.
+    hasPasswordProvider: user.providerData.some(p => p.providerId === 'password'),
   };
+}
+
+/**
+ * Where Firebase's hosted verify/reset page sends the user when it is done.
+ *
+ * Without this the flow dead-ends on a Firebase-branded page with nothing to
+ * click, usually in a mail app's in-app browser. Sign-in is the right landing
+ * spot for both mails: a password reset ends by signing in with the new one,
+ * and a confirmation is often opened on a different device than the one the
+ * account was created on.
+ *
+ * The origin must be on Firebase Auth's **Authorized domains** list, or the SDK
+ * rejects the call with `auth/unauthorized-continue-uri` — hence deriving it
+ * from the running origin rather than hardcoding a host per environment.
+ */
+function continueToSignIn(): ActionCodeSettings {
+  return { url: `${window.location.origin}${PATHS.signIn}`, handleCodeInApp: false };
 }
 
 /** Subscribe to auth-state changes. Returns an unsubscribe function. */
@@ -82,13 +106,27 @@ export async function signUpEmail(
     await user.getIdToken(true).catch(() => undefined);
   }
 
-  // Send a verification email, but do not hard-gate sign-in on it — matching
-  // the mobile app's behaviour exactly.
-  await sendEmailVerification(user).catch(() => undefined);
+  // Sign-up is gated on confirming this address, so the mail is the next step
+  // of the flow rather than a background nicety. A failure to send is still not
+  // fatal — the account exists, and `VerifyEmailPage` offers a resend.
+  await sendEmailVerification(user, continueToSignIn()).catch(() => undefined);
+}
+
+/**
+ * Re-send the confirmation mail to the signed-in user.
+ *
+ * Unlike the send during sign-up, this one is a direct response to a button, so
+ * it lets errors through — a silent no-op on a click the user is watching for
+ * is worse than `auth/too-many-requests` rendered as a message.
+ */
+export async function sendVerification(): Promise<void> {
+  const user = getFirebaseAuth().currentUser;
+  if (!user) return;
+  await sendEmailVerification(user, continueToSignIn());
 }
 
 export async function sendReset(email: string): Promise<void> {
-  await sendPasswordResetEmail(getFirebaseAuth(), email);
+  await sendPasswordResetEmail(getFirebaseAuth(), email, continueToSignIn());
 }
 
 /**
@@ -113,7 +151,20 @@ export async function reloadUser(): Promise<User | null> {
   if (!user) return null;
   await user.reload();
   const fresh = getFirebaseAuth().currentUser;
-  return fresh ? mapFirebaseUser(fresh) : null;
+  if (!fresh) return null;
+
+  /*
+   * Force a fresh ID token once the address is confirmed.
+   *
+   * `reload()` updates the local user record, but the token already in hand is
+   * a snapshot that still claims `email_verified: false` — for up to an hour.
+   * The backend reads that claim (`isUnverifiedPasswordUser`), so without this
+   * the player would clear the gate on screen and still be refused by the API
+   * and the socket until the token happened to rotate.
+   */
+  if (fresh.emailVerified) await fresh.getIdToken(true).catch(() => undefined);
+
+  return mapFirebaseUser(fresh);
 }
 
 export async function signOutFirebase(): Promise<void> {

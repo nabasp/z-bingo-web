@@ -12,6 +12,13 @@ export const PATHS = {
   signUp: '/signup',
   forgotPassword: '/forgot-password',
 
+  /**
+   * Signed in, but held until the address is confirmed. Authenticated rather
+   * than guest — the account exists and the session is real, it just cannot go
+   * anywhere else yet.
+   */
+  verifyEmail: '/verify-email',
+
   // Authenticated shell
   home: '/',
   profile: '/profile',

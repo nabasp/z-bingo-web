@@ -13,6 +13,7 @@ import {
   onAuthChanged,
   reloadUser,
 } from '../services';
+import { needsEmailVerification } from '../utils';
 import type { SignInValues, SignUpValues } from '../types';
 
 /**
@@ -33,8 +34,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthChanged(firebaseUser => {
       if (firebaseUser) {
-        setUser(mapFirebaseUser(firebaseUser));
+        const mapped = mapFirebaseUser(firebaseUser);
+        setUser(mapped);
         setStatus('authenticated');
+
+        /*
+         * Confirming the address happens outside this tab — on Firebase's
+         * hosted page, often on a phone — and nothing pushes that back here:
+         * `emailVerified` on the cached user stays false until the record is
+         * reloaded. Without this, a player who has just verified returns to a
+         * gate that still says they haven't.
+         *
+         * Only for accounts actually held by the gate, so the common case
+         * spends no round trip on it.
+         */
+        if (needsEmailVerification(mapped)) {
+          void reloadUser()
+            .then(fresh => {
+              if (fresh) setUser(fresh);
+            })
+            .catch(() => undefined);
+        }
       } else {
         setUser(null);
         setStatus('unauthenticated');
@@ -71,25 +91,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // display name set during sign-up would otherwise be missing until the
       // next reload. Pull it through explicitly.
       await refreshUser();
-      return { message: 'Account created.', needsVerification: true };
+      return {
+        message: 'Account created. Check your email to confirm your address.',
+        needsVerification: true,
+      };
     },
     [refreshUser],
   );
 
   const logout = useCallback(() => authService.signOut(), []);
 
+  const resendVerificationEmail = useCallback(
+    () => authService.resendVerificationEmail(),
+    [],
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       status,
       isAuthenticated: status === 'authenticated',
+      needsEmailVerification: needsEmailVerification(user),
       login,
       loginWithGoogle,
       signup,
       logout,
       refreshUser,
+      resendVerificationEmail,
     }),
-    [user, status, login, loginWithGoogle, signup, logout, refreshUser],
+    [
+      user,
+      status,
+      login,
+      loginWithGoogle,
+      signup,
+      logout,
+      refreshUser,
+      resendVerificationEmail,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

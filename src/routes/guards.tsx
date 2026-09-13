@@ -22,7 +22,7 @@ function Restoring() {
  * bounce every returning player to the sign-in page on each refresh.
  */
 export function RequireAuth() {
-  const { status } = useAuth();
+  const { status, needsEmailVerification } = useAuth();
   const location = useLocation();
 
   if (status === 'restoring') return <Restoring />;
@@ -30,15 +30,44 @@ export function RequireAuth() {
     // Remember where they were headed, so sign-in can return them there.
     return <Navigate to={PATHS.signIn} replace state={{ from: location.pathname }} />;
   }
+  // Signed in but unconfirmed: a real session that is allowed exactly one page.
+  // Sitting above `AppLayout` means this covers the game and bot routes too,
+  // including a deep link straight into one.
+  if (needsEmailVerification) return <Navigate to={PATHS.verifyEmail} replace />;
+  return <Outlet />;
+}
+
+/**
+ * The verification page itself, which is the one authenticated route that must
+ * NOT be behind {@link RequireAuth} — that guard sends people here, so putting
+ * it inside would loop.
+ *
+ * It still needs both the other answers: a signed-out visitor belongs on sign-in,
+ * and a confirmed account has no reason to see this page again. The latter is
+ * how the player leaves — `refreshUser` flips the flag and this redirects.
+ */
+export function RequireUnverified() {
+  const { status, needsEmailVerification } = useAuth();
+
+  if (status === 'restoring') return <Restoring />;
+  if (status === 'unauthenticated') return <Navigate to={PATHS.signIn} replace />;
+  if (!needsEmailVerification) return <Navigate to={PATHS.home} replace />;
   return <Outlet />;
 }
 
 /** The inverse: keep a signed-in player off the sign-in and sign-up pages. */
 export function RequireGuest() {
-  const { status } = useAuth();
+  const { status, needsEmailVerification } = useAuth();
 
   if (status === 'restoring') return <Restoring />;
-  if (status === 'authenticated') return <Navigate to={PATHS.home} replace />;
+  if (status === 'authenticated') {
+    // Straight to the gate rather than bouncing off `/` first. This path is
+    // live traffic, not an edge case: the confirmation mail's continue URL
+    // lands on sign-in, and the session that opened it is still signed in.
+    return (
+      <Navigate to={needsEmailVerification ? PATHS.verifyEmail : PATHS.home} replace />
+    );
+  }
   return <Outlet />;
 }
 

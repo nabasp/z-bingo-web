@@ -1,11 +1,12 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { AppLayout } from './AppLayout';
-import { RequireAuth, RequireGuest, RequireRoom } from './guards';
+import { RequireAuth, RequireGuest, RequireRoom, RequireUnverified } from './guards';
 import { NotFoundPage } from './NotFoundPage';
 import { PATHS } from './paths';
 import { ForgotPasswordPage } from './auth/ForgotPasswordPage';
 import { SignInPage } from './auth/SignInPage';
 import { SignUpPage } from './auth/SignUpPage';
+import { VerifyEmailPage } from './auth/VerifyEmailPage';
 import { FriendsPage } from './app/FriendsPage';
 import { HomePage } from './app/HomePage';
 import { PlayWithFriendsPage } from './app/PlayWithFriendsPage';
@@ -44,6 +45,12 @@ export const router = createBrowserRouter([
       { path: PATHS.signUp, element: <SignUpPage /> },
       { path: PATHS.forgotPassword, element: <ForgotPasswordPage /> },
     ],
+  },
+  {
+    // Signed in, unconfirmed: its own group, since `RequireAuth` redirects here
+    // and nesting it under that guard would loop.
+    element: <RequireUnverified />,
+    children: [{ path: PATHS.verifyEmail, element: <VerifyEmailPage /> }],
   },
   {
     element: <RequireAuth />,

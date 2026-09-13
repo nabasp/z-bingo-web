@@ -18,4 +18,14 @@ export interface User {
   email: string;
   /** Optional remote avatar URL. Falls back to initials when absent. */
   avatarUrl?: string;
+  /** Whether Firebase has confirmed the user owns {@link User.email}. */
+  emailVerified: boolean;
+  /**
+   * Whether the account can sign in with an email and password.
+   *
+   * Verification is only ever demanded of these accounts: Google and Apple have
+   * already proved the address, and an account that has no password to sign in
+   * with would be locked out by a gate it can never satisfy.
+   */
+  hasPasswordProvider: boolean;
 }

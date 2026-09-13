@@ -4,6 +4,7 @@ import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
 import { ProfileHeader } from '@/features/auth/components';
 import { useAuth } from '@/features/auth/context';
 import { HandleEditor } from '@/features/social';
+import type { User } from '@/types';
 import { PATHS } from '../paths';
 
 export function ProfilePage() {
@@ -12,7 +13,14 @@ export function ProfilePage() {
 
   // Only reachable when authenticated, so `user` is always present; the
   // fallback just satisfies the type.
-  const currentUser = user ?? { id: '', fullName: 'Player', email: '', avatarUrl: undefined };
+  const currentUser: User = user ?? {
+    id: '',
+    fullName: 'Player',
+    email: '',
+    avatarUrl: undefined,
+    emailVerified: false,
+    hasPasswordProvider: false,
+  };
 
   const headingRef = useAnnounceOnFocus({
     title: 'Profile',
