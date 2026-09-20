@@ -47,7 +47,7 @@ function speak(prev: RoomSnapshot | null, next: RoomSnapshot | null) {
 }
 
 describe('deriveSpeechEvents', () => {
-  it('names the caller and says whether it landed on your board', () => {
+  it('names the cell and the caller, and says whether it landed on your board', () => {
     const before = room({ currentTurnSeat: 1 });
     const after = room({
       currentTurnSeat: 1,
@@ -55,8 +55,10 @@ describe('deriveSpeechEvents', () => {
       callHistory: [{ number: 4, playerId: RIVAL }],
     });
 
+    // The cell leads: it is what a sighted player reads off the board, and
+    // what tells a listener whether the call is worth turning towards.
     expect(speak(before, after)).toEqual([
-      'Ravi called 4. Marked on your board',
+      'A2, 4, called by Ravi. Marked on your board',
     ]);
   });
 
@@ -69,19 +71,28 @@ describe('deriveSpeechEvents', () => {
       callHistory: [{ number: 4, playerId: RIVAL }],
     });
 
+    // No cell to name, and none is invented.
     expect(speak(before, after)).toEqual([
-      'Ravi called 4. Not on your board',
+      '4, called by Ravi. Not on your board',
     ]);
   });
 
-  it('calls you "You" rather than your name', () => {
+  it('echoes your own call in the words the board already said', () => {
+    // Pressing Enter announces the call immediately, a round trip before this
+    // snapshot arrives. Matching that sentence — and its dedupe key — is what
+    // stops the two being heard as two separate calls.
     const before = room({ currentTurnSeat: 0 });
     const after = room({
       currentTurnSeat: 1,
       calledNumbers: [4],
       callHistory: [{ number: 4, playerId: ME }],
     });
-    expect(speak(before, after)[0]).toBe('You called 4. Marked on your board');
+
+    const audioEvents = deriveAudioEvents(before, after, ME);
+    const [call] = deriveSpeechEvents(before, after, ME, { audioEvents });
+
+    expect(call.text).toBe('A2, 4 marked');
+    expect(call.dedupeKey).toBe('called:4');
   });
 
   it('reports line progress with a running count', () => {

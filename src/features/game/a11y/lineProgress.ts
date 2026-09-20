@@ -21,23 +21,35 @@ import { coordList, lineName, type Notation } from './boardCoords';
  * already uses.
  */
 
+/**
+ * What counts as a cell being done.
+ *
+ * `'marked'` during play; `'filled'` while the board is being laid out, where
+ * nothing is ever marked and asking about marks would answer "needs every
+ * cell" on every line of every board. The same keys ask the same question on
+ * both stages — this is the word that changes underneath them.
+ */
+export type LineBasis = 'filled' | 'marked';
+
 export interface LineNeed {
   type: LineType;
   index: number;
-  /** Board indices on the line that are not yet marked, in reading order. */
+  /** Board indices on the line that are not done yet, in reading order. */
   needed: number[];
 }
 
-function needOf(line: LineDescriptor, marked: Set<number>): LineNeed {
+function needOf(line: LineDescriptor, done: Set<number>): LineNeed {
   return {
     type: line.type,
     index: line.index,
-    needed: line.cells.filter(cellIndex => !marked.has(cellIndex)),
+    needed: line.cells.filter(cellIndex => !done.has(cellIndex)),
   };
 }
 
-function markedIndices(cells: Cell[]): Set<number> {
-  return new Set(cells.filter(cell => cell.marked).map(cell => cell.index));
+function doneIndices(cells: Cell[], basis: LineBasis): Set<number> {
+  const isDone = (cell: Cell) =>
+    basis === 'filled' ? cell.value !== null : cell.marked;
+  return new Set(cells.filter(isDone).map(cell => cell.index));
 }
 
 /** What one named line still needs. */
@@ -46,12 +58,13 @@ export function needFor(
   size: number,
   type: LineType,
   index: number,
+  basis: LineBasis = 'marked',
 ): LineNeed | null {
   const line = buildLines(size).find(
     candidate => candidate.type === type && candidate.index === index,
   );
   if (!line) return null;
-  return needOf(line, markedIndices(cells));
+  return needOf(line, doneIndices(cells, basis));
 }
 
 /** The line through a cell, for the row and column readouts. */
@@ -60,10 +73,11 @@ export function needThrough(
   size: number,
   cellIndex: number,
   axis: 'row' | 'col',
+  basis: LineBasis = 'marked',
 ): LineNeed | null {
   const index =
     axis === 'row' ? Math.floor(cellIndex / size) : cellIndex % size;
-  return needFor(cells, size, axis, index);
+  return needFor(cells, size, axis, index, basis);
 }
 
 /**
@@ -76,7 +90,7 @@ export function needThrough(
  */
 export function nearStrikes(cells: Cell[], size: number): LineNeed[] {
   if (cells.length < size * size) return [];
-  const marked = markedIndices(cells);
+  const marked = doneIndices(cells, 'marked');
   return buildLines(size)
     .map(line => needOf(line, marked))
     .filter(need => need.needed.length === 1);

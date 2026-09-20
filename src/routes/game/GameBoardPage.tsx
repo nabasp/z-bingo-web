@@ -4,7 +4,7 @@ import { Banner, Button, ConfirmDialog, PageShell } from '@/components/ui';
 import { announcer, TIER } from '@/lib/a11y/Announcer';
 import { haptic } from '@/lib/a11y/haptics';
 import { getNotation } from '@/lib/a11y/notation';
-import { BOARD_KEYS, SHORTCUTS } from '@/lib/a11y/shortcuts';
+import { boardKeysFor, SHORTCUTS } from '@/lib/a11y/shortcuts';
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
 import { useShortcut } from '@/lib/a11y/useShortcut';
 import { audioManager } from '@/lib/audio/AudioManager';
@@ -49,9 +49,9 @@ const KEYBOARD_HELP =
   `${SHORTCUTS.exitGame.spoken} to leave the game. ` +
   // Built from the same table the grid binds from, so the help cannot name a
   // key the board does not answer.
-  `On the board, single keys ask it questions: ${BOARD_KEYS.map(
-    spec => `${spec.spoken} for ${spec.description.replace(/\.$/, '')}`,
-  ).join(', ')}.`;
+  `On the board, single keys ask it questions: ${boardKeysFor('play')
+    .map(spec => `${spec.spoken} for ${spec.description.replace(/\.$/, '')}`)
+    .join(', ')}.`;
 
 export function GameBoardPage() {
   const navigate = useNavigate();
@@ -100,12 +100,18 @@ export function GameBoardPage() {
 
       if (!isMyTurn) {
         haptic('invalid');
-        announcer.speak('Not your turn yet', { assertive: true });
+        announcer.speak('Not your turn yet', {
+          ...TIER.interrupt,
+          dedupeKey: 'not-your-turn',
+        });
         return;
       }
       if (cell.marked) {
         haptic('invalid');
-        announcer.speak(`${cell.value} has already been called`, { assertive: true });
+        announcer.speak(`${cell.value} has already been called`, {
+          ...TIER.interrupt,
+          dedupeKey: `already-called:${cell.value}`,
+        });
         return;
       }
 
@@ -114,15 +120,17 @@ export function GameBoardPage() {
       // a confirmation that arrives a round trip late reads as lag, and the
       // player has usually moved on. The echo carries the same `dedupeKey`, so
       // whichever lands second is dropped and the number is never said twice.
+      // Calling a number on your own board is what marks it, so "marked" is
+      // both what the spec asks for here and what actually happened.
       announcer.speak(
-        `${coordOf(cell.index, boardSize, getNotation())}, ${cell.value} called`,
+        `${coordOf(cell.index, boardSize, getNotation())}, ${cell.value} marked`,
         { ...TIER.interrupt, dedupeKey: `called:${cell.value}`, dedupeMs: 4000 },
       );
     },
     [isMyTurn, callNumber, boardSize],
   );
 
-  /** Answers P / R / C / D / X / S, asked from the focused cell. */
+  /** Answers P / R / C / D / A / S, asked from the focused cell. */
   const onBoardAction = useBoardReadouts({
     cells: board,
     size: boardSize,

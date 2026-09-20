@@ -1,7 +1,11 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BOARD_KEYS, SHORTCUTS } from '@/lib/a11y/shortcuts';
+import {
+  BOARD_KEYS,
+  describeBoardKeyForReference,
+  SHORTCUTS,
+} from '@/lib/a11y/shortcuts';
 import { HelpButton } from '@/features/guide/HelpButton';
 import { GuidePage } from './GuidePage';
 
@@ -30,6 +34,11 @@ function renderGuide() {
 }
 
 afterEach(cleanup);
+
+/** Shortcut descriptions contain regex punctuation, so they are escaped. */
+function escapeForSearch(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 describe('GuidePage structure', () => {
   it('is navigable by heading', () => {
@@ -76,9 +85,11 @@ describe('GuidePage content matches the app', () => {
 
     for (const spec of Object.values(SHORTCUTS)) {
       expect(screen.getByText(spec.keys)).toBeInTheDocument();
-      // `getAllBy`, not `getBy`: Alt+M and the board's bare M do the same
-      // thing and say so in the same words, which is the point of them.
-      expect(screen.getAllByText(spec.description).length).toBeGreaterThan(0);
+      // A substring match, because a chord that is bound on only one of the
+      // two stages says so after its description.
+      expect(
+        screen.getAllByText(new RegExp(escapeForSearch(spec.description))).length,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -87,7 +98,13 @@ describe('GuidePage content matches the app', () => {
 
     for (const spec of BOARD_KEYS) {
       expect(screen.getAllByText(spec.keys).length).toBeGreaterThan(0);
-      expect(screen.getAllByText(spec.description).length).toBeGreaterThan(0);
+      // The guide describes a key away from any one screen, so it prints both
+      // stages where they differ. Asserting the same builder the page uses is
+      // what keeps this a check that the key is documented at all, rather than
+      // a copy of its prose.
+      expect(
+        screen.getAllByText(describeBoardKeyForReference(spec)).length,
+      ).toBeGreaterThan(0);
     }
   });
 

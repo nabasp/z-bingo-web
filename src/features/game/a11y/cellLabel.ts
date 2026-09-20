@@ -87,14 +87,18 @@ export function cellLabel({
 }: CellLabelOptions): string {
   const position = positionOf(index, size, notation);
 
-  if (value === null) return `${position}, empty`;
+  // "blank", not "empty": the spec words it that way in prose rather than in
+  // an example, and it is the one word a player hears on every cell they have
+  // not reached yet.
+  if (value === null) return `${position}, blank`;
 
   return sentence(
     `${position}, ${value}`,
     // "not marked" is said out loud during play because the whole game is
-    // knowing which of your numbers are still open. During setup nothing is
-    // ever marked, so saying it on all N² cells would be noise.
-    variant === 'play' ? (marked ? 'marked' : 'not marked') : undefined,
+    // knowing which of your numbers are still open. During setup there is
+    // nothing to mark, so the state word is "filled" — which is what the cell
+    // just became, and the confirmation the player is listening for.
+    variant === 'play' ? (marked ? 'marked' : 'not marked') : 'filled',
     inCompletedLine ? 'part of a completed line' : undefined,
     variant === 'setup' && selected ? 'selected for swap' : undefined,
   );

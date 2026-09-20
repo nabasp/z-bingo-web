@@ -2,7 +2,7 @@ import { list, ordinal, playerName, plural, sentence } from '@/lib/a11y/phrases'
 import type { AudioEvent } from '../audio/gameAudioEvents';
 import type { RoomSnapshot } from '../types/events';
 import { completedLines, toCells } from '../utils';
-import { lineName, type Notation } from './boardCoords';
+import { coordOf, lineName, type Notation } from './boardCoords';
 import { describeNearStrikes, nearStrikes } from './lineProgress';
 
 /**
@@ -126,15 +126,34 @@ export function deriveSpeechEvents(
     const last = next.callHistory[next.callHistory.length - 1];
     const caller = nameOf(next, last.playerId, myId);
     const onMyBoard = fired.has('number_marked');
+    const isMine = last.playerId === myId;
+    // Where it landed, leading — that is what a sighted player reads off the
+    // board, and what tells a listener whether the call is worth turning
+    // towards. There is no coordinate for a number that is not on your board,
+    // and one is not invented: the cell is simply left out.
+    const cellIndex = onMyBoard
+      ? (next.yourBoard?.indexOf(last.number) ?? -1)
+      : -1;
+    const where =
+      cellIndex >= 0 ? `${coordOf(cellIndex, next.size, notation)}, ` : '';
     events.push({
-      text: sentence(
-        `${caller} called ${last.number}`,
-        // The sound already distinguishes hit from miss; this says which cell,
-        // which the sound cannot.
-        onMyBoard ? 'Marked on your board' : 'Not on your board',
-      ),
+      text: isMine
+        ? `${where}${last.number} marked`
+        : sentence(
+            `${where}${last.number}, called by ${caller}`,
+            // The sound already distinguishes hit from miss; this says so in
+            // words, which the sound cannot.
+            onMyBoard ? 'Marked on your board' : 'Not on your board',
+          ),
       priority: 50,
-      dedupeKey: `call:${last.number}:${next.callHistory.length}`,
+      // Your own call was already announced the moment you pressed Enter, so
+      // this echo carries that announcement's key and the announcer drops
+      // whichever arrives second. Anyone else's call has no local twin, and is
+      // keyed by position in the history so two calls of the same number in a
+      // rematch are not mistaken for one.
+      dedupeKey: isMine
+        ? `called:${last.number}`
+        : `call:${last.number}:${next.callHistory.length}`,
     });
   }
 

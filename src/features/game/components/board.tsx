@@ -10,13 +10,18 @@ import {
 } from 'react';
 import { cn } from '@/lib/cn';
 import { announcer, TIER } from '@/lib/a11y/Announcer';
-import { describeBoardKeys } from '@/lib/a11y/shortcuts';
+import { describeShortcuts } from '@/lib/a11y/shortcuts';
+import { isSelfVoiceEnabled } from '@/lib/a11y/speechEngine';
 import { useNotation } from '@/lib/a11y/notation';
 import { audioManager } from '@/lib/audio/AudioManager';
 import type { Cell, LineDescriptor } from '../types';
 import { cellLabel, type BoardVariant } from '../a11y/cellLabel';
 import type { Notation } from '../a11y/boardCoords';
-import { BOARD_ACTIONS, type BoardActionName } from '../a11y/boardActions';
+import {
+  actionsFor,
+  type BoardActionName,
+  type BoardStage,
+} from '../a11y/boardActions';
 import { edgeNameAt, type ArrowKey } from '../a11y/edges';
 
 /** Spacing between cells, in px. Must match the `gap` used by the grid. */
@@ -276,6 +281,10 @@ export interface BoardGridProps {
   onBoardAction?: (action: BoardActionName, cellIndex: number) => void;
   /** Jumps the player's microphone on and off, for the bare `M` key. */
   onToggleMic?: () => void;
+  /** Setup only: fills the cells not yet chosen, for the bare `F` key. */
+  onRandomFill?: () => void;
+  /** Setup only: reverses the last board change, for the bare `U` key. */
+  onUndo?: () => void;
 }
 
 /**
@@ -303,6 +312,8 @@ export function BoardGrid({
   label,
   onBoardAction,
   onToggleMic,
+  onRandomFill,
+  onUndo,
 }: BoardGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -326,14 +337,31 @@ export function BoardGrid({
    * `memo` would never hit — the whole board would re-render on every
    * countdown tick. (The mobile board learned this the hard way.)
    */
+  // `BoardVariant` and `BoardStage` are the same two words; naming it `stage`
+  // here keeps the key tables readable at the call sites below.
+  const stage: BoardStage = variant;
+
+  /**
+   * What the cursor says when it lands.
+   *
+   * Behind a ref because it reads the completed-line set, which is derived
+   * further down, and because `moveFocus` must keep a stable identity — the
+   * whole board's `memo` depends on it.
+   */
+  const labelRef = useRef<(index: number) => string>(() => '');
+
   const pressRef = useRef(onCellPress);
   const actionRef = useRef(onBoardAction);
   const micRef = useRef(onToggleMic);
+  const fillRef = useRef(onRandomFill);
+  const undoRef = useRef(onUndo);
   const cellsRef = useRef(cells);
   useEffect(() => {
     pressRef.current = onCellPress;
     actionRef.current = onBoardAction;
     micRef.current = onToggleMic;
+    fillRef.current = onRandomFill;
+    undoRef.current = onUndo;
     cellsRef.current = cells;
   });
 
@@ -367,6 +395,16 @@ export function BoardGrid({
     gridRef.current
       ?.querySelector<HTMLButtonElement>(`[data-index="${clamped}"]`)
       ?.focus();
+
+    // A screen reader reads the cell it has just been handed focus on. The
+    // app's own voice gets nothing for free, so with "Speak aloud" on — and
+    // only then — the cursor says where it landed. Speaking unconditionally
+    // would talk over the screen reader and say every cell twice, which is the
+    // failure the two paths are kept apart to avoid.
+    if (isSelfVoiceEnabled()) {
+      const spoken = labelRef.current(clamped);
+      if (spoken) announcer.speak(spoken, TIER.interrupt);
+    }
   }, []);
 
   /**
@@ -380,28 +418,40 @@ export function BoardGrid({
    */
   const handleLetter = useCallback(
     (key: string): boolean => {
-      const action = BOARD_ACTIONS.find(spec => spec.key === key);
+      // Stage-filtered, so a key that belongs to the other half of the game is
+      // never swallowed here. `S` during setup falls through to the browser
+      // rather than answering with a table of zeroes.
+      const action = actionsFor(stage).find(spec => spec.key === key);
       if (action) {
         actionRef.current?.(action.name, activeIndex);
         return true;
       }
-      if (key === 'B') {
-        // A fixed landmark to navigate from. The round trip in and out of the
-        // board stays on Alt+B, which is reachable from outside it.
-        moveFocus(0);
-        return true;
+
+      switch (key) {
+        case 'B':
+          // A fixed landmark to navigate from. The round trip in and out of
+          // the board stays on Alt+B, which is reachable from outside it.
+          moveFocus(0);
+          return true;
+        case 'M':
+          micRef.current?.();
+          return true;
+        case 'F':
+          if (stage !== 'setup') return false;
+          fillRef.current?.();
+          return true;
+        case 'U':
+          if (stage !== 'setup') return false;
+          undoRef.current?.();
+          return true;
+        case 'H':
+          announcer.speak(describeShortcuts(stage), TIER.summary);
+          return true;
+        default:
+          return false;
       }
-      if (key === 'M') {
-        micRef.current?.();
-        return true;
-      }
-      if (key === '?') {
-        announcer.speak(describeBoardKeys(), TIER.summary);
-        return true;
-      }
-      return false;
     },
-    [activeIndex, moveFocus],
+    [activeIndex, moveFocus, stage],
   );
 
   const onKeyDown = useCallback(
@@ -467,6 +517,23 @@ export function BoardGrid({
     () => new Set(completedLines?.flatMap(line => line.cells) ?? []),
     [completedLines],
   );
+
+  useEffect(() => {
+    labelRef.current = (index: number) => {
+      const cell = cellsRef.current[index];
+      if (!cell) return '';
+      return cellLabel({
+        index,
+        size,
+        value: cell.value,
+        variant,
+        marked: cell.marked,
+        selected: selectedIndex === index,
+        inCompletedLine: lineCells.has(index),
+        notation,
+      });
+    };
+  });
 
   const rows = useMemo(() => {
     const out: Cell[][] = [];

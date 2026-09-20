@@ -69,9 +69,12 @@ describe('cellLabel', () => {
     expect(label({ marked: false })).toContain('not marked');
   });
 
-  it('says nothing about marking during setup, where it has no meaning', () => {
+  it('says "filled" rather than a marked state during setup', () => {
+    // Nothing is ever marked while the board is being laid out, so the state
+    // word is the one the player is actually listening for: the cell took the
+    // number. "marked" would be a lie and silence would be no confirmation.
     const setup = label({ variant: 'setup' });
-    expect(setup).toBe('R2, C2, D1, D2, 5');
+    expect(setup).toBe('R2, C2, D1, D2, 5. filled');
     expect(setup).not.toContain('marked');
   });
 
@@ -91,9 +94,9 @@ describe('cellLabel', () => {
     expect(label({ selected: true })).not.toContain('selected for swap');
   });
 
-  it('handles an empty cell', () => {
+  it('handles a cell with no number in it', () => {
     expect(label({ index: 0, value: null, variant: 'setup' })).toBe(
-      'R1, C1, D1, empty',
+      'R1, C1, D1, blank',
     );
   });
 

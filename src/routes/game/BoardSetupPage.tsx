@@ -18,6 +18,7 @@ import { useGameSocket } from '@/features/game/context';
 import { useGameMode } from '@/features/game/mode';
 import { useBoardFocusShortcut, useBoardReadouts, useBoardSetup } from '@/features/game/hooks';
 import { BOARD_GRID_ID } from '@/features/game/constants';
+import { useMicToggleAction } from '@/features/voice';
 import type { BoardSize } from '@/features/game/types';
 import { PATHS } from '../paths';
 
@@ -52,8 +53,8 @@ const KEYBOARD_HELP =
   `${SHORTCUTS.toggleMic.spoken} to mute or unmute. ` +
   // Laying out a board you cannot see is the one place reading the whole thing
   // back matters most, so P is named here rather than left to be discovered.
-  `On the board, press P to hear the whole board read back, or ? for the rest ` +
-  `of the keys.`;
+  `On the board, press P to hear the whole board read back, F to fill the rest ` +
+  `at random, U to undo, or H for the rest of the keys.`;
 
 export function BoardSetupPage() {
   const { room, error, connection, leaveRoom } = useGameSocket();
@@ -87,11 +88,18 @@ export function BoardSetupPage() {
     remaining,
     shuffle,
     fillRandom,
+    undo,
+    canUndo,
     onCellPress,
     isComplete,
     submitted,
     submit,
   } = useBoardSetup(size);
+
+  // The bare `M` inside the grid, doing exactly what Alt+M does outside it.
+  // Without this the key was matched, swallowed and silent on this page while
+  // the spoken help cheerfully announced it.
+  const onToggleMic = useMicToggleAction();
 
   /**
    * The same readouts as during play, minus the ones that mean nothing yet.
@@ -106,6 +114,9 @@ export function BoardSetupPage() {
     size,
     players: room?.players ?? [],
     myId: undefined,
+    // Nothing is ever marked while the board is being laid out, so the row,
+    // column and diagonal readouts answer about cells that are still blank.
+    basis: 'filled',
   });
 
   return (
@@ -141,6 +152,9 @@ export function BoardSetupPage() {
           canActivate={!submitted}
           cellHint={CELL_HINT}
           onBoardAction={onBoardAction}
+          onToggleMic={onToggleMic}
+          onRandomFill={fillRandom}
+          onUndo={undo}
         />
       </div>
 
@@ -163,6 +177,17 @@ export function BoardSetupPage() {
           disabled={submitted || isComplete}
           onClick={fillRandom}>
           Random Fill
+        </Button>
+        {/* Undo is the only way to take back a Shuffle or a Random Fill, which
+            move cells the player never chose one by one. A button as well as a
+            key, so it is not reachable by keyboard alone. */}
+        <Button
+          variant="outline"
+          size="md"
+          fullWidth
+          disabled={!canUndo}
+          onClick={undo}>
+          Undo
         </Button>
       </div>
 

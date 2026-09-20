@@ -164,7 +164,7 @@ describe('BoardGrid arrow-key navigation', () => {
     focusCell(0);
 
     expect(press('Tab')).toBe(false);
-    expect(press('a')).toBe(false);
+    expect(press('z')).toBe(false);
   });
 });
 
@@ -375,7 +375,7 @@ describe('board letter keys', () => {
     renderBoard(3, { onBoardAction });
     focusCell(0);
 
-    ['P', 'R', 'C', 'D', 'X', 'S'].forEach(key => press(key));
+    ['P', 'R', 'C', 'D', 'A', 'S'].forEach(key => press(key));
     expect(onBoardAction.mock.calls.map(call => call[0])).toEqual([
       'pattern',
       'row',
@@ -417,5 +417,62 @@ describe('board letter keys', () => {
     renderBoard();
     focusCell(0);
     expect(press('z')).toBe(false);
+  });
+});
+
+/**
+ * The two halves of the game share one set of letters, and the grid is what
+ * decides which of them are live. A key the current screen cannot answer must
+ * fall through rather than be swallowed into silence — that is the bug the
+ * setup page's bare `M` had.
+ */
+describe('board letter keys follow the stage', () => {
+  const speak = vi.spyOn(announcer, 'speak');
+  afterEach(() => speak.mockClear());
+
+  it('leaves scores alone during setup, where every score is zero', () => {
+    const onBoardAction = vi.fn();
+    renderBoard(3, { variant: 'setup', onBoardAction });
+    focusCell(0);
+
+    expect(press('S')).toBe(false);
+    expect(onBoardAction).not.toHaveBeenCalled();
+  });
+
+  it('fills and undoes during setup', () => {
+    const onRandomFill = vi.fn();
+    const onUndo = vi.fn();
+    renderBoard(3, { variant: 'setup', onRandomFill, onUndo });
+    focusCell(0);
+
+    expect(press('F')).toBe(true);
+    expect(press('U')).toBe(true);
+    expect(onRandomFill).toHaveBeenCalledTimes(1);
+    expect(onUndo).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves fill and undo alone during play, where there is no board to edit', () => {
+    const onRandomFill = vi.fn();
+    const onUndo = vi.fn();
+    renderBoard(3, { onRandomFill, onUndo });
+    focusCell(0);
+
+    expect(press('F')).toBe(false);
+    expect(press('U')).toBe(false);
+    expect(onRandomFill).not.toHaveBeenCalled();
+    expect(onUndo).not.toHaveBeenCalled();
+  });
+
+  it('reads the keys out on H, naming the chords as well as the letters', () => {
+    renderBoard(3, { variant: 'setup' });
+    focusCell(0);
+
+    expect(press('H')).toBe(true);
+    const help = speak.mock.calls.map(call => String(call[0])).join(' ');
+    // The chords were previously spoken only once, on arrival.
+    expect(help).toContain('Alt plus B');
+    expect(help).toContain('Alt plus M');
+    // Setup binds no Escape, so the help must not offer one.
+    expect(help).not.toContain('Escape');
   });
 });

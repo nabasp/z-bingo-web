@@ -1,5 +1,5 @@
 import { useRef, type RefObject } from 'react';
-import { announcer, SHORTCUTS, useShortcut } from '@/lib/a11y';
+import { announcer, isSelfVoiceEnabled, SHORTCUTS, TIER, useShortcut } from '@/lib/a11y';
 
 export interface BoardFocusShortcutOptions {
   /** The `id` given to the `BoardGrid`. */
@@ -21,9 +21,12 @@ export interface BoardFocusShortcutOptions {
  * whatever the player was on before, which is what makes it safe to use — a
  * shortcut that strands you somewhere is one you learn not to press.
  *
- * Nothing is announced on either move. The cell speaks its own label on focus
- * and the restored element speaks its own name; an extra announcement would
- * talk over both.
+ * A screen reader announces both moves for free: the cell speaks its own label
+ * on focus and the restored element speaks its own name, so nothing is added
+ * here for them. The app's own voice gets neither, which is why the landing
+ * cell is spoken when — and only when — "Speak aloud" is on. It is read off
+ * the cell's `aria-label`, so it is by construction the same sentence the
+ * screen reader would have said.
  */
 export function useBoardFocusShortcut({
   gridId,
@@ -42,7 +45,7 @@ export function useBoardFocusShortcut({
         // Reachable between rounds, when the board has unmounted. Silence would
         // look like a broken key.
         announcer.speak('The board is not ready yet.', {
-          assertive: true,
+          ...TIER.interrupt,
           dedupeKey: 'shortcut-board',
         });
         return;
@@ -72,6 +75,11 @@ export function useBoardFocusShortcut({
         grid.querySelector<HTMLElement>('[role="gridcell"][tabindex="0"]') ??
         grid.querySelector<HTMLElement>('[role="gridcell"]');
       cell?.focus();
+
+      if (cell && isSelfVoiceEnabled()) {
+        const label = cell.getAttribute('aria-label');
+        if (label) announcer.speak(label, TIER.interrupt);
+      }
     },
     { enabled },
   );

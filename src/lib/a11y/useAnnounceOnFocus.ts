@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { announcer } from './Announcer';
+import { announcer, TIER } from './Announcer';
 
 /** Long enough for the new page to have painted before focus is moved. */
 const FOCUS_DELAY_MS = 120;
@@ -47,7 +47,7 @@ export function useAnnounceOnFocus<T extends HTMLElement = HTMLHeadingElement>({
       lastAnnounced.current = signature;
       // Assertive: arriving somewhere new outranks whatever was being said
       // about the page we just left.
-      announcer.speak(detail ? `${title}. ${detail}` : title, { assertive: true });
+      announcer.speak(detail ? `${title}. ${detail}` : title, TIER.interrupt);
     }
 
     // Focus is parked once per mount, and the flag is only raised when it

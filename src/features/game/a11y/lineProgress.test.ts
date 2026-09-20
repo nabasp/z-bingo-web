@@ -35,6 +35,43 @@ describe('needFor', () => {
   });
 });
 
+describe('needFor by basis', () => {
+  /** A 3×3 where only the given indices hold a number. Nothing is marked. */
+  function unplaced(filled: number[]): Cell[] {
+    return Array.from({ length: SIZE * SIZE }, (_, index) => ({
+      index,
+      value: filled.includes(index) ? index + 1 : null,
+      marked: false,
+    }));
+  }
+
+  it('counts a cell as done when it holds a number', () => {
+    expect(needFor(unplaced([3, 5]), SIZE, 'row', 1, 'filled')?.needed).toEqual([4]);
+  });
+
+  it('still answers about marks when asked to', () => {
+    // Same board, the other question: nothing is marked, so the row needs all
+    // three. This is exactly what setup used to hear, and why `basis` exists.
+    expect(needFor(unplaced([3, 5]), SIZE, 'row', 1, 'marked')?.needed).toEqual([
+      3, 4, 5,
+    ]);
+  });
+
+  it('defaults to marks, which is where the readouts started', () => {
+    expect(needFor(board([3, 5]), SIZE, 'row', 1)?.needed).toEqual([4]);
+  });
+
+  it('follows the basis through needThrough as well', () => {
+    expect(needThrough(unplaced([0, 1]), SIZE, 2, 'row', 'filled')?.needed).toEqual([2]);
+  });
+
+  it('leaves the near-strike warning on marks, where it belongs', () => {
+    // A whole row placed but nothing called: no line is one cell from a
+    // strike, and warning about one would be nonsense during setup.
+    expect(nearStrikes(unplaced([0, 1, 2]), SIZE)).toEqual([]);
+  });
+});
+
 describe('needThrough', () => {
   it('finds the row through a cell', () => {
     expect(needThrough(board([3, 5]), SIZE, 4, 'row')?.index).toBe(1);

@@ -23,3 +23,11 @@ npm test          # vitest, including the accessibility assertions
 npm run lint
 npx tsc -b        # typecheck
 ```
+
+## Accessibility
+
+How the game works from the keyboard and with a screen reader — the shortcut
+model, what gets spoken and why, and what is still untested — is in
+**[`docs/accessibility.md`](docs/accessibility.md)**. The key tables themselves
+are generated from `src/lib/a11y/shortcuts.ts`, so Settings, the in-app guide
+and the spoken help cannot describe a key the app does not bind.

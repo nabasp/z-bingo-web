@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { announcer, sentence, SHORTCUTS, useShortcut } from '@/lib/a11y';
+import { announcer, sentence, SHORTCUTS, TIER, useShortcut } from '@/lib/a11y';
 import { useOptionalVoice } from '../context/useVoice';
 import { VOICE_LABEL, VOICE_WHY } from '../voiceLabels';
 
@@ -26,7 +26,7 @@ export function useMicToggleAction(): () => void {
     // beside the point. Say so rather than let it look broken.
     if (!toggleMic) {
       announcer.speak('Voice chat is not part of a game against the bot.', {
-        assertive: true,
+        ...TIER.interrupt,
         dedupeKey: 'voice-status',
       });
       return;
@@ -38,6 +38,7 @@ export function useMicToggleAction(): () => void {
       const next = !micOn;
       toggleMic();
       announcer.speak(next ? 'Microphone on' : 'Microphone muted', {
+        ...TIER.notify,
         dedupeKey: 'voice-status',
       });
       return;
@@ -47,7 +48,7 @@ export function useMicToggleAction(): () => void {
     // state rather than retrying silently, so the key is never simply dead.
     announcer.speak(
       sentence(VOICE_LABEL[connection], VOICE_WHY[connection] ?? 'Voice chat is not available.'),
-      { assertive: true, dedupeKey: 'voice-status' },
+      { ...TIER.interrupt, dedupeKey: 'voice-status' },
     );
   }, [connection, micOn, toggleMic]);
 }

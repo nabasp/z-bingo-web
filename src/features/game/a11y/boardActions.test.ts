@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Cell, PublicPlayer } from '../types';
-import { BOARD_ACTIONS, describeBoardAction, type BoardActionContext } from './boardActions';
+import {
+  actionsFor,
+  BOARD_ACTIONS,
+  describeAction,
+  describeBoardAction,
+  type BoardActionContext,
+} from './boardActions';
 
 const SIZE = 3;
 
@@ -31,6 +37,66 @@ describe('BOARD_ACTIONS', () => {
   it('binds each action to a distinct key', () => {
     const keys = BOARD_ACTIONS.map(action => action.key);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('names the diagonals D and A, the pair a player has to hold together', () => {
+    // A rather than X: the letter is the word, which is the only mnemonic
+    // available to someone learning these by ear.
+    expect(BOARD_ACTIONS.find(a => a.name === 'diagonal')?.key).toBe('D');
+    expect(BOARD_ACTIONS.find(a => a.name === 'antiDiagonal')?.key).toBe('A');
+  });
+
+  it('keeps scores out of setup, where every score is zero', () => {
+    expect(actionsFor('setup').map(a => a.name)).not.toContain('scores');
+    expect(actionsFor('play').map(a => a.name)).toContain('scores');
+  });
+
+  it('gives every action a stage to live on', () => {
+    for (const action of BOARD_ACTIONS) {
+      expect(action.stages.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('describes the line readouts differently on the two stages', () => {
+    // The key asks the same question; what counts as an answer does not.
+    const row = BOARD_ACTIONS.find(a => a.name === 'row')!;
+    expect(describeAction(row, 'setup')).toContain('blank');
+    expect(describeAction(row, 'play')).toContain('strike');
+  });
+});
+
+describe('describeBoardAction during setup', () => {
+  /**
+   * The bug this pins: a setup board has no marked cells, so asking about
+   * marks answered "needs every cell" on every line of every board — true,
+   * and useless to the person laying the board out.
+   */
+  function setupBoard(filled: number[]): Cell[] {
+    return Array.from({ length: SIZE * SIZE }, (_, index) => ({
+      index,
+      value: filled.includes(index) ? index + 1 : null,
+      marked: false,
+    }));
+  }
+
+  it('answers about blank cells, not unmarked ones', () => {
+    const cells = setupBoard([3, 5]);
+    expect(
+      describeBoardAction('row', context({ cells, basis: 'filled' })),
+    ).toBe('Row 2 needs 1 cell: B2.');
+  });
+
+  it('calls a fully placed line complete', () => {
+    const cells = setupBoard([3, 4, 5]);
+    expect(
+      describeBoardAction('row', context({ cells, basis: 'filled' })),
+    ).toBe('Row 2 is complete.');
+  });
+
+  it('reads an unplaced board back as blank', () => {
+    expect(
+      describeBoardAction('pattern', context({ cells: setupBoard([]) })),
+    ).toBe('Row 1: blank, blank, blank. Row 2: blank, blank, blank. Row 3: blank, blank, blank.');
   });
 });
 

@@ -16,7 +16,11 @@
  * sections are identical; the controls sections deliberately are not, because
  * the two platforms are genuinely operated differently.
  */
-import { BOARD_KEYS, SHORTCUTS } from '@/lib/a11y/shortcuts';
+import {
+  BOARD_KEYS,
+  describeBoardKeyForReference,
+  SHORTCUTS,
+} from '@/lib/a11y/shortcuts';
 
 export interface GuideItem {
   /** Optional lead-in, e.g. a key or a gesture. Rendered in bold. */
@@ -48,7 +52,10 @@ export const WEB_CONTROL_SECTIONS: GuideSection[] = [
     items: [
       { term: SHORTCUTS.focusBoard.keys, text: SHORTCUTS.focusBoard.description },
       { term: SHORTCUTS.toggleMic.keys, text: SHORTCUTS.toggleMic.description },
-      { term: SHORTCUTS.exitGame.keys, text: SHORTCUTS.exitGame.description },
+      {
+        term: SHORTCUTS.exitGame.keys,
+        text: `${SHORTCUTS.exitGame.description} Only while a game is running; there is no Escape while you are laying your board out.`,
+      },
       {
         text: 'These are combinations rather than single letters on purpose: away from the board, screen readers claim bare letters like B and M for their own navigation, so a plain letter would never reach the game.',
       },
@@ -77,9 +84,15 @@ export const WEB_CONTROL_SECTIONS: GuideSection[] = [
     id: 'board-questions',
     title: 'Asking the board a question',
     intro:
-      'While the board has focus, single letters work. Four of the six answer about the cell you are on, so the answer follows your cursor.',
+      'While the board has focus, single letters work. Most of them answer about the cell you are on, so the answer follows your cursor. Where setting up and playing differ, both are given.',
     items: [
-      ...BOARD_KEYS.map(spec => ({ term: spec.keys, text: spec.description })),
+      // Both stages, side by side, because the same key asks the same question
+      // of a board that is being laid out and one that is being played — and
+      // that pairing is the reason there is only one set of letters to learn.
+      ...BOARD_KEYS.map(spec => ({
+        term: spec.keys,
+        text: describeBoardKeyForReference(spec),
+      })),
       {
         text: 'Single letters are safe here and nowhere else: the board is a grid, and screen readers switch to focus mode inside one and hand every key straight to the page.',
       },

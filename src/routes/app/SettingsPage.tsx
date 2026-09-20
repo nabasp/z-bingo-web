@@ -1,6 +1,10 @@
 import { PageHeading, PageShell, SettingToggle } from '@/components/ui';
 import { setNotation, useNotation } from '@/lib/a11y/notation';
-import { BOARD_KEYS, SHORTCUTS } from '@/lib/a11y/shortcuts';
+import {
+  BOARD_KEYS,
+  describeBoardKeyForReference,
+  SHORTCUTS,
+} from '@/lib/a11y/shortcuts';
 import {
   isSpeechSynthesisSupported,
   setSelfVoiceEnabled,
@@ -147,7 +151,8 @@ export function SettingsPage() {
 
         <p className="px-1 text-sm text-muted-foreground">
           The board also works with the arrow keys: move between cells, then
-          press Enter or Space to call a number.
+          press Enter or Space — to place the next number while you are setting
+          up, or to call it during a game.
         </p>
 
         <PageHeading
@@ -167,7 +172,10 @@ export function SettingsPage() {
                 </kbd>
               </dt>
               <dd className="flex-1 text-right text-sm text-muted-foreground">
-                {spec.description}
+                {/* Setting up and playing ask the same question of different
+                    things, so both are shown rather than one standing in for
+                    the other. */}
+                {describeBoardKeyForReference(spec)}
               </dd>
             </div>
           ))}
