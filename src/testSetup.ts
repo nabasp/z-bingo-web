@@ -15,6 +15,7 @@
  *    without this, rendering the board in a test throws before any assertion
  *    runs.
  */
+import { vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 
 /*
@@ -29,6 +30,26 @@ for (const method of ['play', 'pause', 'load'] as const) {
     value: method === 'play' ? () => Promise.resolve() : () => {},
   });
 }
+
+/*
+ * The clips are fetched, not preloaded through the element — see
+ * `AudioManager.fetchOne`. Nothing in a test may reach the network, and the
+ * loading gate in front of every screen will not open until all 28 settle, so
+ * they are served from here instead. A test that wants a failure overrides
+ * `fetch` itself.
+ */
+if (typeof URL.createObjectURL !== 'function') {
+  URL.createObjectURL = () => 'blob:test';
+  URL.revokeObjectURL = () => {};
+}
+
+vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+  const url = String(input);
+  if (url.includes('/audio/')) {
+    return new Response(new Blob([new Uint8Array(8)]), { status: 200 });
+  }
+  throw new Error(`Unexpected fetch in a test: ${url}`);
+});
 
 if (!HTMLDialogElement.prototype.showModal) {
   HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {

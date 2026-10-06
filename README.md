@@ -24,6 +24,20 @@ npm run lint
 npx tsc -b        # typecheck
 ```
 
+## Sound assets
+
+`audio-src/` holds the authored clips — 48 kHz 16-bit stereo WAV, the same files the mobile app
+ships. They are **not** served. `public/audio/` holds the 128 kbps AAC the browser actually
+downloads, which is 92% smaller for the same 33 seconds of audio and is what makes the loading
+screen quick.
+
+```bash
+npm run encode:audio   # audio-src/*.wav -> public/audio/*.m4a
+```
+
+Re-run it after changing or adding a clip, and commit both. The script uses `ffmpeg` where it
+exists and falls back to `afconvert`, which is built into macOS.
+
 ## Accessibility
 
 How the game works from the keyboard and with a screen reader — the shortcut

@@ -191,8 +191,123 @@ Changing any of them means changing both. See
 
 ---
 
+---
+
+## The loading gate
+
+Nothing renders until the game's sounds are in memory.
+[`AppLoadingGate`](../src/features/loading/AppLoadingGate.tsx) wraps the router, so the first
+screen a player sees is a loading screen and the first cue of a match is a `play()` call rather
+than a download.
+
+**The bug it fixes.** `AudioManager.preload()` builds the audio elements but sets
+`preload="none"` — no bytes. The clips only started downloading at `unlock()`, on the first click
+anywhere in the app, and 6.2 MB of WAV then raced the game screen. A cue asked to play while its
+file was still arriving simply did not.
+
+### Why it is fast
+
+Three things, in order of how much they matter:
+
+| | Before | After |
+| --- | --- | --- |
+| Format | 48 kHz 16-bit stereo WAV | 128 kbps stereo AAC |
+| Whole set | 6.2 MB | 507 KB |
+| **Blocks the app** | **6.2 MB** | **292 KB** |
+| Cache headers on `/audio/` | none | 30 days |
+
+**Compression did most of it.** The clips are 33 seconds of short UI blips, and as PCM that is
+6.2 MB. AAC at 128 kbps keeps both channels and the full sample rate for 507 KB — a 92% cut for
+material nobody is listening to critically. The sources live in `audio-src/`, outside `public/` so
+they never ship, and `npm run encode:audio` produces what does. `soundRegistry.ts` still names the
+mobile app's `.wav`, because it is shared verbatim with an app where the clips are on the device
+and size costs nothing; `webSource()` translates the extension and the difference stays out of the
+shared file.
+
+**Two passes, not one.** The gate waits only on `CRITICAL_SOUNDS` — the clips a game cannot start
+without — and fetches the other seventeen once the player is already in, where a lobby chime
+arriving a second late costs nothing. Sequential rather than parallel, so the second pass does not
+compete for the connection with the only moment that matters. Together with the format change that
+is 6.2 MB on the critical path before, 292 KB after: **22× less**.
+
+**They are cached now.** `/audio/` previously had no cache headers at all, so every production
+visit re-validated all 28 clips before the loading screen could open — the one thing it exists to
+avoid. Thirty days rather than the `immutable` year the Vite bundle gets, because these filenames
+carry no content hash and a replaced clip has to be able to reach people who already hold the old
+one.
+
+### Fetched, not preloaded
+
+Clips are pulled with `fetch` and handed to their element as a `blob:` URL, rather than the more
+obvious `preload="auto"` plus a wait for `canplaythrough`. The obvious version works in Chrome and
+fails on iOS Safari, which ignores `preload` outright and touches the network only when `play()` is
+called — the event never arrives, every clip times out, and a healthy iPhone is told the game
+failed to load. `fetch` behaves the same everywhere, reports a real HTTP status so a 404 is a
+failure rather than a silence, and is abortable.
+
+### What blocks, and what does not
+
+[`CRITICAL_SOUNDS`](../src/lib/audio/preloadPlan.ts) is the subset the game will not start without
+— the core loop, the clock, progress and the result. Anything else that fails is named on the
+loading screen, stays silent in play, and is never a reason to block: holding a player out of a
+match the server has already started, with a turn clock running, because a copy-code chime 404'd
+would be worse than the delay this system exists to remove.
+
+Retry reloads only what failed. Elements are reused, both listeners and the timeout are removed on
+every path out of `fetchOne`, and a clip already in memory short-circuits — so nothing here can
+accumulate a second `Audio` instance, a duplicate listener or a stray request.
+
+### Accessibility
+
+- **A heading**, focused on arrival. It reads `Zendalona Bingo, loading the game`: a title screen
+  to look at, and a statement of which screen this is to anyone who cannot see the progress bar.
+  The text never changes, because focus is parked on it and a heading that rewrote itself under
+  that focus would be re-read on every phase.
+- **No progress bar on a warm cache.** Every visit after the first settles in a few milliseconds,
+  and a bar that appeared and vanished in that time reads as a glitch rather than as progress, so
+  it is held back for 250 ms. The container keeps a fixed minimum height either way, so Start never
+  moves out from under the pointer.
+- **Phase announcements only** — "Loading sounds.", then "Ready." Progress is never announced:
+  twenty-eight "n of 28" updates would interrupt each other the whole way down and tell a listener
+  nothing they can act on. The count is on screen, and on the progress bar's `aria-valuetext` for
+  anyone who navigates to it.
+- **Nothing on this screen is a live region.** The announcer already owns a pair, mounted before
+  React renders, and every phase goes through it; a second `role="status"` here would say the same
+  sentence twice, one of them unpaced.
+- **Focus follows the work**: the heading while loading, then Start when ready or Retry on failure.
+- **"Ready" and failures interrupt; the in-progress line does not.** Not politeness — a race. The
+  screen's own arrival announcement is assertive, and an assertive utterance clears what is
+  pending, so a polite "Ready." raised in the same breath was discarded. On a warm cache that
+  window is a few milliseconds, which is exactly when it happened.
+
+### Start, and why it is a button
+
+Browsers block audio until the page has had a genuine user gesture. Because the gate runs at boot,
+nothing has been clicked yet — so "Ready" would be a lie without a press to back it. The Start
+button is that press: one gesture, once per session, and it is also the keyboard and screen-reader
+entry point into the app.
+
+### Two races only a browser showed
+
+Both were found by running it, not by the tests, and both are now pinned by tests:
+
+- **React's development double-mount tore down the in-flight pass**, because `App`'s cleanup
+  disposed a page-lifetime singleton. The aborted requests were then reported as *failures*, and
+  the loading screen announced that eleven game sounds had not loaded — a sentence a blind player
+  has no way to check and every reason to believe. `release()` now marks a pass `cancelled`, and
+  `App` no longer disposes the manager.
+- **`useAnnounceOnFocus` parks focus on a 120 ms delay.** This is the one screen that can finish
+  sooner than that, and on a warm cache it did: focus moved to Start, the timer fired, and focus
+  was dragged back to the heading — leaving a keyboard player pressing Enter on a heading. The
+  screen owns its own arrival and focus now.
+
 ## What is still missing
 
+- **The loading screen's failure state has not been seen in a browser.** A real 404 is confirmed
+  to be detected and classified as blocking, and the error UI, its focus move and the
+  retry-only-what-failed rule are covered by tests — but the rendered error screen itself has only
+  been seen in jsdom, because the browser's HTTP cache makes a clip hard to un-serve once it has
+  loaded.
 - **No real screen-reader pass has been done on this work.** Everything here is verified by unit
   tests, types and lint — but the acceptance test is playing a full match with the screen off, and
   that has not happened yet. NVDA, JAWS and VoiceOver all need separate passes: the browse/focus
@@ -212,14 +327,17 @@ npx tsc -b
 
 Then, in a browser:
 
-1. **Setup.** Alt + B into the board. With *Speak aloud* on, arrow around: every cell must be
+1. **The loading gate.** Reload with an empty cache. The first thing on screen is "Loading game"
+   with a progress bar; when it says Ready, focus must already be on Start, and Enter must enter
+   the app. Reload again with a warm cache: the same screen, but immediate.
+2. **Setup.** Alt + B into the board. With *Speak aloud* on, arrow around: every cell must be
    spoken, and one with no number must say "blank". Press Enter and hear "B2, 1. filled".
-2. Press `R`, `C`, `D` and `A` on a half-filled board and check each answer against the screen.
+3. Press `R`, `C`, `D` and `A` on a half-filled board and check each answer against the screen.
    They must name the cells that are still **blank**, not every cell on the line.
-3. `P` reads the board back. `F` fills the rest and says so. `U` puts it back. `M` toggles the mic.
+4. `P` reads the board back. `F` fills the rest and says so. `U` puts it back. `M` toggles the mic.
    `H` reads every key out, including Alt + B and Alt + M and **not** Escape. `S` does nothing.
-4. **Play.** The same keys, now answering about strikes. Enter on your own number says
+5. **Play.** The same keys, now answering about strikes. Enter on your own number says
    "B2, 9 marked" — once, not twice. An opponent's call says "B2, 25, called by John".
-5. Arrow into a wall: the edge is named, once, and the page does not scroll.
-6. Turn *Speak aloud* **off** and a screen reader **on**, and repeat 1 and 4. Nothing may be said
+6. Arrow into a wall: the edge is named, once, and the page does not scroll.
+7. Turn *Speak aloud* **off** and a screen reader **on**, and repeat 2 and 5. Nothing may be said
    twice.

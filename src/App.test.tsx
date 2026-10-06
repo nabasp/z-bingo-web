@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -43,9 +43,40 @@ const App = (await import('./App')).default;
 
 afterEach(cleanup);
 
+/**
+ * Walk the loading gate, which now stands in front of every screen.
+ *
+ * Pressing Start is not a detail of the test: it is the user gesture browsers
+ * require before any audio may play, so there is no path into the app that
+ * skips it.
+ */
+async function enterApp() {
+  const start = await screen.findByRole('button', { name: 'Start' });
+  fireEvent.click(start);
+}
+
 describe('App', () => {
+  it('holds every screen back until the sounds are loaded', async () => {
+    render(<App />);
+
+    // The gate, not the router: no page may render behind it.
+    expect(
+      screen.getByRole('heading', { name: /loading the game/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /welcome back/i })).toBeNull();
+
+    await enterApp();
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /welcome back/i }),
+      ).toBeInTheDocument(),
+    );
+  });
+
   it('renders without crashing, and lands on sign-in when signed out', async () => {
     render(<App />);
+    await enterApp();
 
     // Reaching any real content proves the whole provider stack — auth, game
     // socket, social, feedback bridges and the router — composed without
@@ -61,8 +92,13 @@ describe('App', () => {
     // correctly. Asserting no error was logged makes the intent explicit.
     const onError = vi.spyOn(console, 'error').mockImplementation(() => {});
     render(<App />);
+    await enterApp();
 
-    await waitFor(() => expect(screen.getByRole('heading')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /welcome back/i }),
+      ).toBeInTheDocument(),
+    );
 
     const routerComplaints = onError.mock.calls
       .flat()
