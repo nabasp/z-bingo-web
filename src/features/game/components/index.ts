@@ -10,7 +10,6 @@ export * from './OptionSelector';
 export * from './PlayerAvatar';
 export * from './PlayerCard';
 export * from './PlayerList';
-export * from './RecentGameTile';
 export * from './result';
 export * from './RoomCodeCard';
 export * from './RoomCodeInput';

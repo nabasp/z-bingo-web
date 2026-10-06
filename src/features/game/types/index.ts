@@ -44,13 +44,6 @@ export interface Cell {
   marked: boolean;
 }
 
-export interface RecentGame {
-  id: string;
-  outcome: 'won' | 'lost';
-  players: number;
-  when: string;
-}
-
 export interface Announcement {
   id: string;
   number: number;

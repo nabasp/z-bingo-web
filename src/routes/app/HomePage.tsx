@@ -1,26 +1,60 @@
-import { Banner, PageHeading, PageShell, SectionLabel } from '@/components/ui';
+import { useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { Banner, PageHeading, PageShell } from '@/components/ui';
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
 import { useAuth } from '@/features/auth/context';
 import { useGameSocket } from '@/features/game/context';
-import { ActionCard, RecentGameTile } from '@/features/game/components';
-import { mockRecentGames } from '@/features/game/mock';
+import { ActionCard } from '@/features/game/components';
+import {
+  EmptyState,
+  ErrorState,
+  HistoryRow,
+  LeaderboardRow,
+  LoadingState,
+  historyApi,
+  useRequest,
+} from '@/features/history';
 import { PATHS } from '../paths';
 
+/** How many of each Home shows before "View all". */
+const PREVIEW_COUNT = 3;
+
 /**
- * Match history has no backend yet.
+ * A "view all" link, styled as a quiet button.
  *
- * Flipping this on renders the mock fixtures for design work; off, the section
- * shows an honest empty state instead of presenting invented data as real. Same
- * switch, same default as the mobile `HomeScreen`.
+ * A link, not a button: it goes somewhere, so it should open in a new tab on a
+ * middle-click and announce itself as a link. The arrow is decoration.
  */
-const SHOW_MOCK_DATA = false;
+function ViewAllLink({ to, children }: { to: string; children: string }) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border px-4 text-sm font-medium text-foreground hover:bg-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+      {children}
+      <span aria-hidden="true">→</span>
+    </Link>
+  );
+}
 
 export function HomePage() {
   const { user } = useAuth();
   // Home is where the route guard lands a player whose room ended without
   // them, so it is where the explanation has to be shown.
   const { notice, clearNotice } = useGameSocket();
-  const recentGames = SHOW_MOCK_DATA ? mockRecentGames : [];
+
+  // Fetched on every visit: arriving here remounts the page, so a game that
+  // has just ended is always in the list without any refresh logic.
+  const fetchRecent = useCallback(
+    async () => (await historyApi.games({ limit: PREVIEW_COUNT })).games,
+    [],
+  );
+  const recent = useRequest('recent', fetchRecent);
+
+  const fetchTop = useCallback(
+    async () => (await historyApi.leaderboard({ limit: PREVIEW_COUNT })).players,
+    [],
+  );
+  const top = useRequest('top', fetchTop);
 
   const headingRef = useAnnounceOnFocus({
     title: 'Home',
@@ -75,19 +109,72 @@ export function HomePage() {
         />
       </div>
 
-      <section className="flex w-full flex-col gap-3">
-        <SectionLabel>Recent Games</SectionLabel>
-        {recentGames.length > 0 ? (
-          <div className="flex w-full gap-3">
-            {recentGames.map(game => (
-              <RecentGameTile key={game.id} game={game} />
+      <section aria-labelledby="recent-games-heading" className="flex w-full flex-col gap-3">
+        <h2
+          id="recent-games-heading"
+          className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+          Recent Games
+        </h2>
+
+        {recent.status === 'loading' ? <LoadingState label="Loading your recent games" /> : null}
+
+        {recent.status === 'error' && recent.error ? (
+          <ErrorState message={recent.error} onRetry={recent.reload} />
+        ) : null}
+
+        {recent.status === 'ready' && recent.data?.length === 0 ? (
+          // No button: every way to start a game is directly above.
+          <EmptyState
+            title="No games yet"
+            body="Join a bingo game to start building your game history."
+          />
+        ) : null}
+
+        {recent.status === 'ready' && recent.data && recent.data.length > 0 ? (
+          <>
+            <ul aria-label="Recent games" className="flex w-full flex-col gap-3">
+              {recent.data.map(item => (
+                <HistoryRow key={item.id} item={item} />
+              ))}
+            </ul>
+            <ViewAllLink to={PATHS.history}>View all games</ViewAllLink>
+          </>
+        ) : null}
+      </section>
+
+      <section aria-labelledby="top-players-home-heading" className="flex w-full flex-col gap-3">
+        <h2
+          id="top-players-home-heading"
+          className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+          Top Players
+        </h2>
+
+        {top.status === 'loading' ? <LoadingState label="Loading the top players" /> : null}
+
+        {top.status === 'error' && top.error ? (
+          <ErrorState message={top.error} onRetry={top.reload} />
+        ) : null}
+
+        {top.status === 'ready' && top.data?.length === 0 ? (
+          <EmptyState
+            title="No rankings yet"
+            body="Play some games to appear on the leaderboard."
+          />
+        ) : null}
+
+        {top.status === 'ready' && top.data && top.data.length > 0 ? (
+          <ul aria-label="Top players" className="flex w-full flex-col gap-3">
+            {top.data.map((entry, index) => (
+              <LeaderboardRow key={index} entry={entry} />
             ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No games yet. Create or join a room to get started.
-          </p>
-        )}
+          </ul>
+        ) : null}
+
+        {/* Offered even with no rankings: it is also where your own standing
+            lives. */}
+        {top.status === 'ready' ? (
+          <ViewAllLink to={PATHS.leaderboard}>View leaderboard</ViewAllLink>
+        ) : null}
       </section>
     </PageShell>
   );

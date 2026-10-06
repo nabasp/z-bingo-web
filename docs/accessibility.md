@@ -301,6 +301,44 @@ Both were found by running it, not by the tests, and both are now pinned by test
   was dragged back to the heading — leaving a keyboard player pressing Enter on a heading. The
   screen owns its own arrival and focus now.
 
+---
+
+## History and rankings
+
+Recent games and top players on Home, plus Game History, Game Details and the
+Leaderboard (`src/features/history/`). The scoring rules are in
+`bingo-server/docs/RESULTS.md`; what follows is how they are presented.
+
+- **One row, one sentence, result first.** A history row is a link whose name
+  reads "Bingo #A82F. Won, first place. October 6, 2026. 3 players. Lasted 4
+  minutes 12 seconds" — held in visually hidden text, with the visible layout
+  `aria-hidden` so it is not read again in fragments.
+- **The link's name starts with its visible text** (WCAG 2.5.3, *Label in
+  Name*). The mobile app spells the id out as "A 8 2 F"; the web uses the
+  visible "Bingo #A82F" instead, so a voice-control user can say "click Bingo
+  #A82F" and be understood. `historyItemLabel(item, { title: 'visible' })`.
+- **Every number is named.** "Rank 1. Ann. 125 points. 48 games, 21 wins. 43.8
+  percent win rate" — never a bare "1" or "125" in browse mode.
+- **Results are words, not colours.** Won, Lost, Abandoned, Cancelled are
+  always written; the tint is decoration. Your own leaderboard row says "You".
+- **Your ranking comes first** on the leaderboard, under its own heading — the
+  one row about you may not be on the first page at all.
+- **"Load more", not infinite scroll.** Content that appears by itself as you
+  scroll is invisible to a keyboard and moves the page under a screen reader.
+- **Focus moves to the first new row** after a page loads. This is a bug fix,
+  not a nicety: on the last page "Load more" is removed while it has focus,
+  and the browser drops focus to `<body>`. `useFocusOnLoadMore`.
+- **Filters are toggle buttons** in a labelled group, with `aria-pressed`. Not
+  a tablist: they filter one list in place, and a tablist would promise
+  arrow-key behaviour and panels that do not exist.
+- **Changes are spoken once.** "Showing wins. 3 games." after a filter; "20
+  more games loaded." after a page. Polite, and never the running count.
+- **A stale answer is never shown.** Switching filters while a request is in
+  flight drops the earlier answer rather than showing wins under "Losses".
+- **Game details use a description list** for date, duration, board and word,
+  so each value is paired with its name, and an ordered list for the
+  standings.
+
 ## What is still missing
 
 - **The loading screen's failure state has not been seen in a browser.** A real 404 is confirmed
@@ -308,6 +346,9 @@ Both were found by running it, not by the tests, and both are now pinned by test
   retry-only-what-failed rule are covered by tests — but the rendered error screen itself has only
   been seen in jsdom, because the browser's HTTP cache makes a clip hard to un-serve once it has
   loaded.
+- **History and rankings have not been tried with a screen reader.** The
+  labels, focus moves and announcements are asserted in tests; what NVDA, JAWS
+  and VoiceOver actually say for the hidden-text rows has not been listened to.
 - **No real screen-reader pass has been done on this work.** Everything here is verified by unit
   tests, types and lint — but the acceptance test is playing a full match with the screen off, and
   that has not happened yet. NVDA, JAWS and VoiceOver all need separate passes: the browse/focus

@@ -27,6 +27,11 @@ export const PATHS = {
   friends: '/friends',
   playWithFriends: '/play-with-friends',
 
+  // History and rankings. Read-only views of games already finished.
+  history: '/history',
+  gameDetails: '/history/:gameId',
+  leaderboard: '/leaderboard',
+
   // Game flow. The server's room status decides which of these you are on —
   // see `useGameFlowNavigation`.
   createRoom: '/game/create',
@@ -46,3 +51,8 @@ export const PATHS = {
 } as const;
 
 export type Path = (typeof PATHS)[keyof typeof PATHS];
+
+/** The details page for one game. */
+export function gameDetailsPath(gameId: string): string {
+  return `/history/${encodeURIComponent(gameId)}`;
+}

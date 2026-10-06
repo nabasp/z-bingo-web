@@ -10,6 +10,7 @@ import { PATHS } from './paths';
 
 const NAV_ITEMS = [
   { to: PATHS.home, label: 'Home' },
+  { to: PATHS.leaderboard, label: 'Leaderboard' },
   { to: PATHS.friends, label: 'Friends' },
   { to: PATHS.profile, label: 'Profile' },
 ];

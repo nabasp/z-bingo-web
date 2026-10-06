@@ -15,6 +15,11 @@ import { GuidePage } from './app/GuidePage';
 import { SettingsPage } from './app/SettingsPage';
 import { BotConfigLayout, BotGameLayout } from './bot/BotLayout';
 import { BotSetupPage } from './bot/BotSetupPage';
+import {
+  GameDetailsPage,
+  GameHistoryPage,
+  LeaderboardPage,
+} from '@/features/history/pages';
 import { BoardSetupPage } from './game/BoardSetupPage';
 import { CreateRoomPage } from './game/CreateRoomPage';
 import { GameBoardPage } from './game/GameBoardPage';
@@ -64,6 +69,11 @@ export const router = createBrowserRouter([
           { path: PATHS.guide, element: <GuidePage /> },
           { path: PATHS.friends, element: <FriendsPage /> },
           { path: PATHS.playWithFriends, element: <PlayWithFriendsPage /> },
+          // History and rankings: read-only, and outside the game flow, so the
+          // server's room status never navigates anyone away from them.
+          { path: PATHS.history, element: <GameHistoryPage /> },
+          { path: PATHS.gameDetails, element: <GameDetailsPage /> },
+          { path: PATHS.leaderboard, element: <LeaderboardPage /> },
           {
             /*
              * Play With Bot: a standalone single-player mode.
