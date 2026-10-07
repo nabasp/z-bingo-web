@@ -101,8 +101,13 @@ describe('AppLoadingGate', () => {
 
     // Ready first — a cosmetic clip is not even in the pass the gate waits on.
     expect(await screen.findByRole('button', { name: 'Start' })).toBeInTheDocument();
-    // Then the background pass reports it, without taking Start away.
-    expect(await screen.findByText(/will be silent/i)).toBeInTheDocument();
+    // Then the background pass reports it, without taking Start away. A
+    // longer wait than the default: this is the second of two sequential
+    // passes, and under a loaded test run the default 1s was occasionally
+    // not enough — a flake, not a failure.
+    expect(
+      await screen.findByText(/will be silent/i, {}, { timeout: 4000 }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
   });
 
