@@ -1,27 +1,51 @@
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
+import { SocialFeedbackBridge } from '@/features/social';
+import { InviteListener } from '@/features/social/components/InviteListener';
 import { cn } from '@/lib/cn';
-import { AppLogo } from '@/components/ui';
-import { useAuth } from '@/features/auth/context';
-import { PlayerAvatar } from '@/features/game/components';
+import { BOTTOM_NAV_CLEARANCE, BottomNav } from './BottomNav';
+import { MainNav } from './MainNav';
 import { PATHS } from './paths';
-
-const NAV_ITEMS = [
-  { to: PATHS.home, label: 'Home' },
-  { to: PATHS.profile, label: 'Profile' },
-];
 
 /**
  * The authenticated shell.
  *
- * The mobile app puts Home and Profile in a bottom tab bar; on the web a
- * persistent top bar is the equivalent convention and leaves the vertical space
- * to the content. It hides on the game board, where the board should own the
- * viewport — the same reason the mobile game screen pushes over the tabs.
+ * Navigation follows the device: a top bar on wide screens, and on phones a
+ * tab bar at the foot of the screen like the mobile app's (`BottomNav`). The
+ * tab bar hides throughout the game flow and both hide on the board itself,
+ * where the board should own the viewport — the same reasons the mobile app
+ * pushes its game screens over the tabs.
  */
+
+/**
+ * Pages that hide all navigation: both boards, multiplayer and bot alike. The
+ * grid wants the space, and the nav is one more thing to Tab past to reach it.
+ */
+const BOARD_PATHS = new Set<string>([PATHS.play, PATHS.botPlay]);
+
+/**
+ * The game flow: every screen from creating or joining a room to the result,
+ * and the whole bot mode.
+ *
+ * The phone tab bar is hidden on all of them, matching the mobile app, where
+ * the Game and Bot stacks are pushed *over* the tab bar. A game is something
+ * you are in until you leave it through the game's own controls; tabs that
+ * offered Leaderboard or Friends mid-match would invite walking out of a room
+ * by accident, and they cost a lobby or board-setup screen vertical space it
+ * needs. The top bar stays, with the brand and Help.
+ *
+ * Derived from `PATHS` rather than listed, so a game screen added later is
+ * covered without anyone remembering to add it here.
+ */
+const GAME_FLOW_PATHS = new Set<string>(
+  Object.values(PATHS).filter(
+    path => path.startsWith('/game/') || path === PATHS.bot || path.startsWith(`${PATHS.bot}/`),
+  ),
+);
+
 export function AppLayout() {
   const { pathname } = useLocation();
-  const { user } = useAuth();
-  const hideNav = pathname === PATHS.play;
+  const hideNav = BOARD_PATHS.has(pathname);
+  const hideTabBar = hideNav || GAME_FLOW_PATHS.has(pathname);
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
@@ -32,47 +56,25 @@ export function AppLayout() {
         Skip to content
       </a>
 
-      {!hideNav ? (
-        <header className="border-b border-border bg-background/95 backdrop-blur">
-          <nav
-            aria-label="Main"
-            className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-            <Link to={PATHS.home} className="flex items-center gap-2">
-              <AppLogo size="sm" />
-              <span className="text-xl font-bold text-foreground">bingo</span>
-            </Link>
+      {!hideNav ? <MainNav /> : null}
 
-            <div className="flex items-center gap-1 sm:gap-2">
-              {NAV_ITEMS.map(item => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end
-                  className={({ isActive }) =>
-                    cn(
-                      'rounded-xl px-3 py-2 text-sm font-medium transition-colors',
-                      isActive
-                        ? 'bg-card text-foreground'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )
-                  }>
-                  {item.label}
-                </NavLink>
-              ))}
-              <Link
-                to={PATHS.profile}
-                aria-label="Open profile"
-                className="ml-1 rounded-full">
-                <PlayerAvatar name={user?.fullName || user?.email || 'Player'} seatIndex={0} />
-              </Link>
-            </div>
-          </nav>
-        </header>
-      ) : null}
-
-      <main id="main" className="flex flex-1 flex-col">
+      {/* Bottom padding on phones, so the fixed tab bar never sits over the
+          last of the page — a Continue button, the end of a list. */}
+      <main id="main" className={cn('flex flex-1 flex-col', !hideTabBar && BOTTOM_NAV_CLEARANCE)}>
         <Outlet />
       </main>
+
+      {/* After the page, so it is last in the Tab order as it is on screen. */}
+      {!hideTabBar ? <BottomNav /> : null}
+
+      {/*
+        Both are mounted for every authenticated route, and both need to be
+        inside the router: the bridge reads the current route to decide whether
+        a presence change is worth announcing, and accepting an invitation
+        navigates into the lobby.
+      */}
+      <SocialFeedbackBridge />
+      <InviteListener />
     </div>
   );
 }

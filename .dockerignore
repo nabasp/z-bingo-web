@@ -8,10 +8,13 @@ dist-ssr
 .git
 .gitignore
 
-# Local secrets / config — never bake into the image. The .env.example is kept.
+# Local secrets / config — never bake into the image.
 .env
 .env.*
-!.env.example
+
+# Audio sources. `public/audio/*.m4a` is what ships; these are the 6.2 MB of
+# WAV they are encoded from, and only `npm run encode:audio` ever reads them.
+audio-src
 
 # Logs, editor, OS cruft
 *.log

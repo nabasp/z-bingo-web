@@ -1,14 +1,25 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { AppLayout } from './AppLayout';
-import { RequireAuth, RequireGuest, RequireRoom } from './guards';
+import { RequireAuth, RequireGuest, RequireRoom, RequireUnverified } from './guards';
 import { NotFoundPage } from './NotFoundPage';
 import { PATHS } from './paths';
 import { ForgotPasswordPage } from './auth/ForgotPasswordPage';
 import { SignInPage } from './auth/SignInPage';
 import { SignUpPage } from './auth/SignUpPage';
+import { VerifyEmailPage } from './auth/VerifyEmailPage';
+import { FriendsPage } from './app/FriendsPage';
 import { HomePage } from './app/HomePage';
+import { PlayWithFriendsPage } from './app/PlayWithFriendsPage';
 import { ProfilePage } from './app/ProfilePage';
+import { GuidePage } from './app/GuidePage';
 import { SettingsPage } from './app/SettingsPage';
+import { BotConfigLayout, BotGameLayout } from './bot/BotLayout';
+import { BotSetupPage } from './bot/BotSetupPage';
+import {
+  GameDetailsPage,
+  GameHistoryPage,
+  LeaderboardPage,
+} from '@/features/history/pages';
 import { BoardSetupPage } from './game/BoardSetupPage';
 import { CreateRoomPage } from './game/CreateRoomPage';
 import { GameBoardPage } from './game/GameBoardPage';
@@ -41,6 +52,12 @@ export const router = createBrowserRouter([
     ],
   },
   {
+    // Signed in, unconfirmed: its own group, since `RequireAuth` redirects here
+    // and nesting it under that guard would loop.
+    element: <RequireUnverified />,
+    children: [{ path: PATHS.verifyEmail, element: <VerifyEmailPage /> }],
+  },
+  {
     element: <RequireAuth />,
     children: [
       {
@@ -49,6 +66,36 @@ export const router = createBrowserRouter([
           { path: PATHS.home, element: <HomePage /> },
           { path: PATHS.profile, element: <ProfilePage /> },
           { path: PATHS.settings, element: <SettingsPage /> },
+          { path: PATHS.guide, element: <GuidePage /> },
+          { path: PATHS.friends, element: <FriendsPage /> },
+          { path: PATHS.playWithFriends, element: <PlayWithFriendsPage /> },
+          // History and rankings: read-only, and outside the game flow, so the
+          // server's room status never navigates anyone away from them.
+          { path: PATHS.history, element: <GameHistoryPage /> },
+          { path: PATHS.gameDetails, element: <GameDetailsPage /> },
+          { path: PATHS.leaderboard, element: <LeaderboardPage /> },
+          {
+            /*
+             * Play With Bot: a standalone single-player mode.
+             *
+             * Outside `GameLayout` and `RequireRoom` on purpose. The first
+             * mounts `VoiceProvider` and navigates on socket snapshots, which
+             * would pull a bot game into the multiplayer flow; the second reads
+             * the real socket and would bounce a player with no room home.
+             */
+            element: <BotConfigLayout />,
+            children: [
+              { path: PATHS.bot, element: <BotSetupPage /> },
+              {
+                element: <BotGameLayout />,
+                children: [
+                  { path: PATHS.botBoardSetup, element: <BoardSetupPage /> },
+                  { path: PATHS.botPlay, element: <GameBoardPage /> },
+                  { path: PATHS.botResult, element: <ResultPage /> },
+                ],
+              },
+            ],
+          },
           {
             // Every game route shares the server-driven navigation.
             element: <GameLayout />,

@@ -21,6 +21,8 @@ export function CreateRoomPage() {
     submit,
     isSubmitting,
     errorMessage,
+    existingRoomCode,
+    rejoinExisting,
   } = useCreateRoom();
 
   const headingRef = useAnnounceOnFocus({
@@ -33,11 +35,22 @@ export function CreateRoomPage() {
   // there — the same server-driven model the mobile app uses.
   const onCreate = () => void submit();
 
+  // One account holds one active room, so the server refuses a second. Offer
+  // the way out rather than leaving the player re-pressing a button that will
+  // never work.
+  const onRejoin = () => void rejoinExisting();
+
   return (
     <PageShell>
       <GameScreenHeader title="Create Room" headingRef={headingRef} />
 
       {errorMessage ? <Banner variant="error">{errorMessage}</Banner> : null}
+
+      {existingRoomCode ? (
+        <Button variant="secondary" fullWidth loading={isSubmitting} onClick={onRejoin}>
+          {`Rejoin ${existingRoomCode}`}
+        </Button>
+      ) : null}
 
       <OptionSelector<BoardSize>
         label="Board Size"

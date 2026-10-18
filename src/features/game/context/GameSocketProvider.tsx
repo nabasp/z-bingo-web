@@ -23,15 +23,25 @@
 /* eslint-disable react-hooks/refs, react-hooks/set-state-in-effect, react-hooks/preserve-manual-memoization */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { announcer } from '@/lib/a11y/Announcer';
 import { createGameSocket, type GameSocket } from '@/lib/socketClient';
 import { useAuth } from '@/features/auth/context';
+import { GameRequestError } from './gameError';
 import {
   GameSocketContext,
   type GameSocketValue,
   type SocketStatus,
 } from './gameSocketContext';
-import { forgetRoom, recallRoom, rememberRoom } from './roomMemory';
-import type { GameError, RoomSnapshot, WinnerDeclaredPayload } from '../types/events';
+import type {
+  GameError,
+  RematchOfferPayload,
+  RematchState,
+  RoomClosedPayload,
+  RoomSnapshot,
+  ServerToClientEvents,
+  TurnChangeReason,
+  WinnerDeclaredPayload,
+} from '../types/events';
 
 
 
@@ -41,15 +51,59 @@ import type { GameError, RoomSnapshot, WinnerDeclaredPayload } from '../types/ev
  * The client never derives game outcomes — every field here comes from the
  * server. Components read this state and emit intents; nothing more.
  */
+/**
+ * Rejections that are a normal part of using the board, not faults.
+ *
+ * Cells are deliberately never `disabled` (see `board.tsx`) so assistive tech
+ * can reach and activate them — which means tapping a cell while waiting for
+ * your turn is an ordinary, expected thing to do. Treating the first one as an
+ * error worth a red banner is disproportionate; the banner only earns its place
+ * once someone is clearly trying to play and wondering why nothing happens.
+ */
+const THROTTLED_ERRORS = new Set(['not_your_turn']);
+
+/** How many times in a row before a throttled rejection is worth showing. */
+const REPEATS_BEFORE_SHOWING = 3;
+
+/**
+ * How long any in-game error stays on screen.
+ *
+ * These are all momentary — "not your turn", "already called" — and describe a
+ * situation that has usually passed by the time you have read them. Left up,
+ * one mis-tap put a red banner on the board for the rest of the game.
+ */
+const ERROR_VISIBLE_MS = 4000;
+
 export function GameSocketProvider({ children }: { children: ReactNode }) {
   const { status: authStatus, user } = useAuth();
   const socketRef = useRef<GameSocket | null>(null);
+
+  /**
+   * Subscriptions registered through `on`, kept outside the socket.
+   *
+   * The socket is torn down and rebuilt whenever auth changes, so a listener
+   * attached directly to one instance would silently stop firing. Holding the
+   * registrations here lets them be re-attached to each new socket, and lets
+   * every `on` hand back an unsubscribe that works either way.
+   */
+  const externalListeners = useRef(
+    new Map<string, Set<(...args: unknown[]) => void>>(),
+  );
 
   const [connection, setConnection] = useState<SocketStatus>('idle');
   const [synced, setSynced] = useState(false);
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [error, setError] = useState<GameError | null>(null);
+
+  /** Consecutive count of the same throttled rejection. */
+  const rejectionRef = useRef<{ code: string; count: number }>({ code: '', count: 0 });
+  /** The last snapshot, to spot the game actually moving on. */
+  const lastRoomRef = useRef<RoomSnapshot | null>(null);
+  const [notice, setNotice] = useState<RoomClosedPayload | null>(null);
   const [winner, setWinner] = useState<WinnerDeclaredPayload | null>(null);
+  const [turnChangeReason, setTurnChangeReason] =
+    useState<TurnChangeReason | null>(null);
+  const [rematchOffer, setRematchOffer] = useState<RematchOfferPayload | null>(null);
 
   useEffect(() => {
     if (authStatus !== 'authenticated') {
@@ -70,34 +124,23 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
     socket.on('connect', () => {
       setConnection('connected');
 
-      // Resume whatever room we were in. `synced` flips either way — "you are
-      // in no room" is just as much an answer as a snapshot, and callers must
-      // be able to tell both apart from "not asked yet".
-      const remembered = recallRoom();
-      if (remembered) {
-        // A fresh socket carries no server-side room, so `sync` alone would
-        // answer null even mid-match; `join_room` is the server's rejoin path
-        // and restores seat, board and turn. See `roomMemory.ts`.
-        socket.emit('join_room', { code: remembered }, res => {
-          if (res.ok) {
-            setRoom(res.data);
-          } else {
-            // The room was swept, ended, or we were removed. A rejoining player
-            // short-circuits every other check on the server, so a failure here
-            // genuinely means "you are not in that room" — drop the stale
-            // snapshot rather than leave the player staring at a dead board,
-            // and say why, since the route guard is about to send them home.
-            forgetRoom();
-            setRoom(null);
-            setError(res.error);
-          }
-          setSynced(true);
-        });
-        return;
-      }
-
+      /*
+       * Resume whatever room we were in.
+       *
+       * `sync` is now the whole story. The server resolves membership from the
+       * authenticated account rather than from per-socket state, so a reload or
+       * a reconnect — which always arrives on a brand new socket — finds the
+       * room on its own. This used to need a `sessionStorage` copy of the room
+       * code re-sent as a `join_room`; that workaround existed only because the
+       * server could not answer the question, and mobile, which had no such
+       * workaround, simply lost the game on every blip.
+       *
+       * `synced` flips either way: "you are in no room" is just as much an
+       * answer as a snapshot, and callers must tell both apart from "not asked".
+       */
       socket.emit('sync', res => {
         if (res.ok && res.data) setRoom(res.data);
+        else if (!res.ok) setError(res.error);
         setSynced(true);
       });
     });
@@ -106,7 +149,27 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
     socket.on('connect_error', () => setConnection('offline'));
 
     const applySnapshot = (snapshot: RoomSnapshot) => {
-      rememberRoom(snapshot.code);
+      /*
+       * A number was called, or the turn moved on.
+       *
+       * Either way whatever the player was being told off for no longer
+       * applies, so the message goes and the count starts again. This is what
+       * makes a successful attempt clear the banner: the server answers a good
+       * call with a new snapshot, never with an error.
+       */
+      const previousRoom = lastRoomRef.current;
+      const progressed =
+        !previousRoom ||
+        previousRoom.code !== snapshot.code ||
+        previousRoom.calledNumbers.length !== snapshot.calledNumbers.length ||
+        previousRoom.currentTurnSeat !== snapshot.currentTurnSeat;
+      lastRoomRef.current = snapshot;
+
+      if (progressed) {
+        rejectionRef.current = { code: '', count: 0 };
+        setError(null);
+      }
+
       setRoom(previous => {
         // A public broadcast has no board; keep the one we already hold so a
         // room_updated never wipes the player's own board.
@@ -122,26 +185,128 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       applySnapshot(snapshot);
     });
     socket.on('winner_declared', payload => setWinner(payload));
-    socket.on('error', payload => setError(payload));
-    socket.on('session_superseded', () => {
-      setError({
-        code: 'session_superseded',
-        message: 'You joined from another device.',
+
+    // The server has always said why a turn moved; until now nobody listened,
+    // and the feedback layer guessed from the shape of the snapshot instead.
+    // Recorded as state so it reaches `useGameFeedback` alongside the snapshot
+    // it belongs to — the two arrive in the same tick and are batched together.
+    socket.on('turn_changed', payload => setTurnChangeReason(payload.reason));
+
+    // Somebody wants another round. The prompt this raises is the only place
+    // a player is asked, so it is cleared by the server resolving the offer
+    // rather than by any local timer.
+    socket.on('rematch_offered', payload => setRematchOffer(payload));
+    socket.on('rematch_resolved', payload => {
+      setRematchOffer(null);
+      if (payload.started) setWinner(null);
+    });
+    socket.on('error', payload => {
+      if (!THROTTLED_ERRORS.has(payload.code)) {
+        rejectionRef.current = { code: '', count: 0 };
+        setError(payload);
+        return;
+      }
+
+      const count =
+        rejectionRef.current.code === payload.code
+          ? rejectionRef.current.count + 1
+          : 1;
+      rejectionRef.current = { code: payload.code, count };
+
+      /*
+       * Spoken every time, shown only after a few.
+       *
+       * Suppressing the banner must not mean suppressing the feedback: a
+       * player who cannot see the screen would otherwise tap a cell and get
+       * pure silence, which is exactly the failure the board avoids by never
+       * disabling its cells. The announcer's own deduplication keeps rapid
+       * taps down to one utterance rather than a stutter.
+       */
+      announcer.speak(payload.message, {
+        priority: 30,
+        dedupeKey: `rejected:${payload.code}`,
       });
-      // The other session owns this room now; rejoining on reload would take
-      // the connection straight back off them.
-      forgetRoom();
+
+      if (count >= REPEATS_BEFORE_SHOWING) setError(payload);
+    });
+
+    // The room ended without us asking. Keep the reason — the route guard is
+    // about to send us home, and the explanation has to arrive with us.
+    socket.on('room_closed', payload => {
+      setNotice(payload);
+      setRoom(null);
+      setWinner(null);
+      setRematchOffer(null);
+    });
+
+    socket.on('session_superseded', () => {
+      setNotice({
+        code: '',
+        reason: 'empty',
+        message: 'You joined from another device, so this tab left the game.',
+      });
       setRoom(null);
     });
 
+    // Re-attach anything registered through `on` before the socket opens, so a
+    // subscriber never misses the first event after a reconnect.
+    for (const [event, handlers] of externalListeners.current) {
+      for (const handler of handlers) socket.on(event as never, handler as never);
+    }
+
     socket.connect();
 
+    /*
+     * Nudge the socket when the tab comes back.
+     *
+     * Browsers throttle timers in a backgrounded tab, so socket.io's reconnect
+     * backoff can be stretched to the point where a player who switches away
+     * mid-match returns to a still-disconnected socket and no obvious reason
+     * why. Reconnecting on the way back in makes the recovery immediate; the
+     * server's grace period is what keeps their seat during the gap.
+     */
+    const onVisible = () => {
+      if (!document.hidden && !socket.connected) socket.connect();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
+      document.removeEventListener('visibilitychange', onVisible);
       socket.removeAllListeners();
       socket.close();
       socketRef.current = null;
     };
   }, [authStatus]);
+
+  const on = useCallback(
+    <E extends keyof ServerToClientEvents>(
+      event: E,
+      handler: ServerToClientEvents[E],
+    ): (() => void) => {
+      const key = event as string;
+      const fn = handler as unknown as (...args: unknown[]) => void;
+
+      const handlers = externalListeners.current.get(key) ?? new Set();
+      handlers.add(fn);
+      externalListeners.current.set(key, handlers);
+      socketRef.current?.on(event as never, fn as never);
+
+      return () => {
+        externalListeners.current.get(key)?.delete(fn);
+        socketRef.current?.off(event as never, fn as never);
+      };
+    },
+    [],
+  );
+
+  // Errors describe a moment, not a state, so they clear themselves. Anything
+  // that must persist — a room closing, a handle refused — is a `notice` or a
+  // screen's own state instead.
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => setError(null), ERROR_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [error]);
 
   /** Emit an ack event as a promise, rejecting with the server's error. */
   const request = useCallback(
@@ -163,11 +328,11 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
         socket.emit('create_room', { size, maxPlayers, turnSeconds }, res => {
           if (res.ok) {
             setWinner(null);
-            rememberRoom(res.data.code);
+            setNotice(null);
             setRoom(res.data);
             resolve(res.data);
           } else {
-            reject(new Error(res.error.message));
+            reject(new GameRequestError(res.error));
           }
         });
       }),
@@ -180,11 +345,11 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
         socket.emit('join_room', { code }, res => {
           if (res.ok) {
             setWinner(null);
-            rememberRoom(res.data.code);
+            setNotice(null);
             setRoom(res.data);
             resolve(res.data);
           } else {
-            reject(new Error(res.error.message));
+            reject(new GameRequestError(res.error));
           }
         });
       }),
@@ -215,16 +380,38 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
     socketRef.current?.emit('call_number', { number: value });
   }, []);
 
-  const rematch = useCallback((size?: number) => {
-    setWinner(null);
-    socketRef.current?.emit('rematch', { size });
+  /**
+   * Ask for another round, or accept one already asked for.
+   *
+   * The winner banner stays up until the server confirms the round actually
+   * started — clearing it on the press would show an empty results screen to
+   * someone still waiting on the other players to answer.
+   */
+  const rematch = useCallback(async (): Promise<RematchState> => {
+    const state = await request<RematchState>((socket, resolve, reject) => {
+      socket.emit('rematch', res => {
+        if (res.ok) resolve(res.data);
+        else reject(new GameRequestError(res.error));
+      });
+    });
+    if (state.started) {
+      setWinner(null);
+      setRematchOffer(null);
+    }
+    return state;
+  }, [request]);
+
+  const declineRematch = useCallback(() => {
+    setRematchOffer(null);
+    socketRef.current?.emit('rematch_decline');
   }, []);
 
   const leaveRoom = useCallback(() => {
     socketRef.current?.emit('leave_room');
-    forgetRoom();
     setRoom(null);
     setWinner(null);
+    // Leaving is deliberate, so there is nothing to explain on the way out.
+    setNotice(null);
   }, []);
 
   const me = useMemo(
@@ -238,11 +425,16 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       synced,
       room,
       error,
+      notice,
       winner,
       me,
+      turnChangeReason,
       isHost: Boolean(room && user?.id && room.hostId === user.id),
       isMyTurn: Boolean(me && room && me.seat === room.currentTurnSeat),
       clearError: () => setError(null),
+      clearNotice: () => setNotice(null),
+      on,
+      request,
       createRoom,
       joinRoom,
       setReady,
@@ -252,6 +444,8 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       submitBoard,
       callNumber,
       rematch,
+      declineRematch,
+      rematchOffer,
       leaveRoom,
     }),
     [
@@ -259,9 +453,13 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       synced,
       room,
       error,
+      notice,
       winner,
       me,
+      turnChangeReason,
       user?.id,
+      on,
+      request,
       createRoom,
       joinRoom,
       setReady,
@@ -271,6 +469,8 @@ export function GameSocketProvider({ children }: { children: ReactNode }) {
       submitBoard,
       callNumber,
       rematch,
+      declineRematch,
+      rematchOffer,
       leaveRoom,
     ],
   );

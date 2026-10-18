@@ -1,75 +1,47 @@
-# React + TypeScript + Vite
+# z-bingo-web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The Bingo web client: React, Vite and Tailwind, talking to `bingo-server` over
+REST and one Socket.IO connection.
 
-Currently, two official plugins are available:
+## Running it
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Deployment and configuration — local and production, for this repo and the
+backend — live in **[`z-bingo-deployment`](https://github.com/zendalona/z-bingo-deployment)**,
+which is the single source of truth. It owns the Compose file, the environment
+files and every start/stop/deploy script. Do not add run or deploy instructions
+here.
 
-## React Compiler
+`Dockerfile`, `.dockerignore` and `nginx.conf` are built and used by that stack,
+and are the only deployment files that belong in this repo. Note that `VITE_*`
+values are inlined into the bundle at **build** time, so changing one means
+rebuilding the web image.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Tests
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm test          # vitest, including the accessibility assertions
+npm run lint
+npx tsc -b        # typecheck
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Sound assets
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+`audio-src/` holds the authored clips — 48 kHz 16-bit stereo WAV, the same files the mobile app
+ships. They are **not** served. `public/audio/` holds the 128 kbps AAC the browser actually
+downloads, which is 92% smaller for the same 33 seconds of audio and is what makes the loading
+screen quick.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm run encode:audio   # audio-src/*.wav -> public/audio/*.m4a
 ```
+
+Re-run it after changing or adding a clip, and commit both. The script uses `ffmpeg` where it
+exists and falls back to `afconvert`, which is built into macOS.
+
+## Accessibility
+
+How the game works from the keyboard and with a screen reader — the shortcut
+model, what gets spoken and why, and what is still untested — is in
+**[`docs/accessibility.md`](docs/accessibility.md)**. The key tables themselves
+are generated from `src/lib/a11y/shortcuts.ts`, so Settings, the in-app guide
+and the spoken help cannot describe a key the app does not bind.

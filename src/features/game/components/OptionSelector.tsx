@@ -15,6 +15,13 @@ export interface OptionSelectorProps<T> {
   /** 'grid' = wrapped chips (board size, timer); 'row' = equal-width row. */
   layout?: 'grid' | 'row';
   disabled?: boolean;
+  /**
+   * Guidance read out with the group, via `aria-describedby`.
+   *
+   * Most valuable when `disabled`: a dimmed radiogroup with no stated reason
+   * leaves a screen-reader user unable to tell a bug from a rule.
+   */
+  hint?: string;
 }
 
 /**
@@ -32,8 +39,10 @@ export function OptionSelector<T extends string | number>({
   onChange,
   layout = 'grid',
   disabled = false,
+  hint,
 }: OptionSelectorProps<T>) {
   const labelId = useId();
+  const hintId = `${labelId}-hint`;
 
   return (
     <div className="flex w-full flex-col gap-2">
@@ -41,6 +50,7 @@ export function OptionSelector<T extends string | number>({
       <div
         role="radiogroup"
         aria-labelledby={labelId}
+        aria-describedby={hint ? hintId : undefined}
         className={cn(
           'w-full gap-2',
           layout === 'grid'
@@ -69,6 +79,11 @@ export function OptionSelector<T extends string | number>({
           );
         })}
       </div>
+      {hint ? (
+        <p id={hintId} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -2,13 +2,22 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
+    <!-- SVG first: modern browsers scale it crisply at every size. The PNGs are
+         the fallback for those that ignore `image/svg+xml`, and the 180px
+         apple-touch-icon is what iOS uses for "Add to Home Screen". -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- The app ships a single dark palette; tell the browser so form controls,
          scrollbars and the address bar match rather than flashing white. -->
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0a0a0a" />
-    <title>Bingo</title>
+    <meta name="description" content="Play Bingo with friends." />
+    <meta name="apple-mobile-web-app-title" content="Bingo" />
+    <title>Zendalona Bingo</title>
   </head>
   <body>
     <div id="root"></div>

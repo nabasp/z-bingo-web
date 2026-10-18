@@ -14,12 +14,19 @@ export interface AuthContextValue {
   user: User | null;
   status: AuthStatus;
   isAuthenticated: boolean;
+  /**
+   * True while a signed-in email/password account has not confirmed its
+   * address. The route guards hold such a session at `VerifyEmailPage`.
+   */
+  needsEmailVerification: boolean;
   login: (values: SignInValues) => Promise<void>;
   /** Google popup sign-in. Resolves to `false` if the user cancelled. */
   loginWithGoogle: () => Promise<boolean>;
   signup: (values: SignUpValues) => Promise<SignUpOutcome>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  /** Re-send the confirmation mail to the signed-in user. Throws on failure. */
+  resendVerificationEmail: () => Promise<void>;
 }
 
 /**

@@ -29,22 +29,6 @@ export function turnTimerLabel(turnSeconds: number): string {
 /** Column header letters (used for the classic 5×5 board). */
 export const BINGO_HEADER = 'BINGO';
 
-/**
- * Word lists for memorable two-word room codes, e.g. "brave-otter".
- * Kept short and unambiguous so codes are easy to say and type.
- */
-export const CODE_ADJECTIVES = [
-  'brave', 'calm', 'clever', 'cosmic', 'eager', 'fuzzy', 'gentle', 'golden',
-  'happy', 'jolly', 'lucky', 'mighty', 'noble', 'quick', 'quiet', 'royal',
-  'shiny', 'silent', 'snowy', 'solar', 'sunny', 'swift', 'vivid', 'witty',
-] as const;
-
-export const CODE_NOUNS = [
-  'otter', 'tiger', 'falcon', 'panda', 'comet', 'maple', 'river', 'meadow',
-  'harbor', 'pixel', 'cactus', 'walrus', 'badger', 'lynx', 'heron', 'koala',
-  'willow', 'ember', 'pebble', 'cobra', 'puffin', 'bison', 'gecko', 'raven',
-] as const;
-
 /** A room code is two lowercase words joined by a hyphen. */
 export const ROOM_CODE_PATTERN = /^[a-z]+-[a-z]+$/;
 
@@ -65,3 +49,12 @@ export const PLAYER_AVATAR_CLASSES = [
 export function playerAvatarClass(seatIndex: number): string {
   return PLAYER_AVATAR_CLASSES[seatIndex % PLAYER_AVATAR_CLASSES.length];
 }
+
+/**
+ * The board grid's DOM id.
+ *
+ * A constant rather than `useId()` because it is the address an outside
+ * shortcut uses to find the board. Exactly one board is mounted per route —
+ * setup and play are separate routes — so it cannot collide.
+ */
+export const BOARD_GRID_ID = 'board-grid';

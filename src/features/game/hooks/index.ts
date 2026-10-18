@@ -1,5 +1,7 @@
+export * from './useBoardReadouts';
 export * from './useBoardSetup';
 export * from './useCreateRoom';
+export * from './useBoardFocusShortcut';
 export * from './useGame';
 export * from './useGameFeedback';
 export * from './useGameFlowNavigation';

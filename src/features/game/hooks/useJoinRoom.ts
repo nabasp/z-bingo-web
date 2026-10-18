@@ -4,21 +4,19 @@
  */
 
 import { useCallback, useState } from 'react';
-import { mockInvitations } from '../mock';
 import { isValidRoomCode, normalizeRoomCode } from '../utils';
 import { useGameSocket } from '../context';
 
 /**
- * Join Room state: room-code entry plus placeholder invitations.
+ * Join Room state: room-code entry.
  *
  * Local validation is a convenience only — the server re-validates the code
- * and owns membership. Invitations remain mock until a friends backend exists.
+ * and owns membership. Invitations are not here any more: a real one arrives
+ * as a modal from `features/social`, wherever the player happens to be.
  */
 export function useJoinRoom() {
   const { joinRoom } = useGameSocket();
   const [code, setCode] = useState('');
-  // TODO(invitations): fetch real invitations once the friends API lands.
-  const [invitations, setInvitations] = useState(mockInvitations);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -27,10 +25,6 @@ export function useJoinRoom() {
   }, []);
 
   const isValid = isValidRoomCode(code);
-
-  const declineInvitation = useCallback((id: string) => {
-    setInvitations(prev => prev.filter(inv => inv.id !== id));
-  }, []);
 
   /** Resolves with the joined room code, or null when the join failed. */
   const submit = useCallback(
@@ -56,8 +50,6 @@ export function useJoinRoom() {
     code,
     setCode: setNormalizedCode,
     isValid,
-    invitations,
-    declineInvitation,
     submit,
     isSubmitting,
     errorMessage,

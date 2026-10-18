@@ -46,6 +46,11 @@ export function getAuthErrorMessage(error: unknown): string {
     switch (error.code) {
       case 'session_expired':
         return 'Your session has expired. Please sign in again.';
+      // The backend half of the verification gate. Named here rather than left
+      // to the message fallback because the code is a contract both sides rely
+      // on — see `isUnverifiedPasswordUser` in the server's `lib/firebase.ts`.
+      case 'email_unverified':
+        return 'Please confirm your email address to continue. Check your inbox for the link.';
       case 'network':
         return 'Network error. Please check your connection and try again.';
       case 'validation_error':

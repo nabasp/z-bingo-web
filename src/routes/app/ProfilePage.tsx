@@ -3,6 +3,8 @@ import { Button, PageHeading, PageShell } from '@/components/ui';
 import { useAnnounceOnFocus } from '@/lib/a11y/useAnnounceOnFocus';
 import { ProfileHeader } from '@/features/auth/components';
 import { useAuth } from '@/features/auth/context';
+import { HandleEditor } from '@/features/social';
+import type { User } from '@/types';
 import { PATHS } from '../paths';
 
 export function ProfilePage() {
@@ -11,11 +13,18 @@ export function ProfilePage() {
 
   // Only reachable when authenticated, so `user` is always present; the
   // fallback just satisfies the type.
-  const currentUser = user ?? { id: '', fullName: 'Player', email: '', avatarUrl: undefined };
+  const currentUser: User = user ?? {
+    id: '',
+    fullName: 'Player',
+    email: '',
+    avatarUrl: undefined,
+    emailVerified: false,
+    hasPasswordProvider: false,
+  };
 
   const headingRef = useAnnounceOnFocus({
     title: 'Profile',
-    detail: 'Manage your account, open settings, or log out.',
+    detail: 'Change your handle, open settings, or log out.',
   });
 
   // TODO(api): build the edit-profile flow. Until it exists the control is
@@ -27,6 +36,10 @@ export function ProfilePage() {
       <PageHeading headingRef={headingRef} title="Profile" subtitle="Manage your account" />
 
       <ProfileHeader user={currentUser} orientation="vertical" size="lg" />
+
+      <hr className="w-full border-border" />
+
+      <HandleEditor />
 
       <hr className="w-full border-border" />
 

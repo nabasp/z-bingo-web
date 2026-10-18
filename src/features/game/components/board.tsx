@@ -9,9 +9,20 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import { cn } from '@/lib/cn';
+import { announcer, TIER } from '@/lib/a11y/Announcer';
+import { describeShortcuts } from '@/lib/a11y/shortcuts';
+import { isSelfVoiceEnabled } from '@/lib/a11y/speechEngine';
+import { useNotation } from '@/lib/a11y/notation';
+import { audioManager } from '@/lib/audio/AudioManager';
 import type { Cell, LineDescriptor } from '../types';
-import { BINGO_HEADER } from '../constants';
 import { cellLabel, type BoardVariant } from '../a11y/cellLabel';
+import type { Notation } from '../a11y/boardCoords';
+import {
+  actionsFor,
+  type BoardActionName,
+  type BoardStage,
+} from '../a11y/boardActions';
+import { edgeNameAt, type ArrowKey } from '../a11y/edges';
 
 /** Spacing between cells, in px. Must match the `gap` used by the grid. */
 const CELL_GAP = 4;
@@ -22,19 +33,58 @@ const STRIKE_WIDTH = 5;
 /** How far a strike overhangs the centres of the end cells, as a cell fraction. */
 const STRIKE_OVERHANG = 0.5;
 
-/** Column letter headers — only meaningful for a 5×5 board (B-I-N-G-O). */
-export const BingoHeaderRow = memo(function BingoHeaderRow({ size }: { size: number }) {
-  if (size !== BINGO_HEADER.length) return null;
+export interface BingoHeaderRowProps {
+  /** The word this board spells, from the server. Length always equals `size`. */
+  word: string;
+  /**
+   * How many letters are earned — one per completed line.
+   *
+   * Struck through as they are won, which is the whole point of the word: it
+   * is the progress bar of a bingo game. Defaults to none, for setup.
+   */
+  earned?: number;
+}
+
+/**
+ * The word a player spells by completing lines.
+ *
+ * The word comes from the server (`RoomSnapshot.word`) rather than a constant
+ * here, because it differs per board size — BUS at 3×3, GAME at 4×4, BINGO at
+ * 5×5, and so on up to CHAMPION. This used to hardcode "BINGO" and render
+ * nothing at all for any other size, which quietly removed the feature from
+ * every board that was not 5×5.
+ */
+export const BingoHeaderRow = memo(function BingoHeaderRow({
+  word,
+  earned = 0,
+}: BingoHeaderRowProps) {
+  if (!word) return null;
+  const letters = word.split('');
+  // A 5×5 has twelve possible lines but only five letters, so the raw count can
+  // overshoot. Clamped here rather than at each call site, or the spoken label
+  // ends up saying "twelve of five letters complete".
+  const struck = Math.min(earned, letters.length);
+
   return (
-    // Five single letters would otherwise be five separate screen-reader stops
-    // that tell the player nothing they can act on. Column identity lives in
-    // each cell's own label, so these are pure decoration.
+    // One node, not one per letter: five separate screen-reader stops spelling
+    // out B-I-N-G-O tell a player nothing they can act on, and column identity
+    // already lives in each cell's own label. The progress *is* worth saying,
+    // so the row carries a single composed label instead of being hidden.
     <div
-      aria-hidden="true"
+      role="status"
+      aria-label={`${word}. ${struck} of ${letters.length} letters complete.`}
       className="grid w-full"
-      style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))`, gap: CELL_GAP }}>
-      {BINGO_HEADER.split('').map(letter => (
-        <span key={letter} className="py-1.5 text-center text-base font-bold text-primary">
+      style={{ gridTemplateColumns: `repeat(${letters.length}, minmax(0, 1fr))`, gap: CELL_GAP }}>
+      {letters.map((letter, index) => (
+        <span
+          key={`${letter}-${index}`}
+          aria-hidden="true"
+          className={cn(
+            'py-1.5 text-center text-base font-bold transition-colors',
+            index < struck
+              ? 'text-primary line-through decoration-2'
+              : 'text-muted-foreground',
+          )}>
           {letter}
         </span>
       ))}
@@ -72,6 +122,8 @@ export interface BoardCellProps {
   hintId?: string;
   /** Roving tabindex: exactly one cell in the grid is tabbable. */
   tabbable: boolean;
+  /** The player's coordinate vocabulary. A primitive, so `memo` still holds. */
+  notation: Notation;
   /** Must be referentially stable, or memoization here is pointless. */
   onActivate: (index: number) => void;
   onFocusCell: (index: number) => void;
@@ -106,6 +158,7 @@ export const BoardCell = memo(function BoardCell({
   actionable,
   hintId,
   tabbable,
+  notation,
   onActivate,
   onFocusCell,
 }: BoardCellProps) {
@@ -127,7 +180,16 @@ export const BoardCell = memo(function BoardCell({
       tabIndex={tabbable ? 0 : -1}
       onClick={handleClick}
       onFocus={handleFocus}
-      aria-label={cellLabel({ index, size, value, variant, marked, selected, inCompletedLine })}
+      aria-label={cellLabel({
+        index,
+        size,
+        value,
+        variant,
+        marked,
+        selected,
+        inCompletedLine,
+        notation,
+      })}
       // Only offered when doing it is actually possible; an affordance you
       // cannot use is worse than none.
       aria-describedby={actionable ? hintId : undefined}
@@ -207,6 +269,22 @@ export interface BoardGridProps {
   cellHint?: string;
   /** Spoken as the grid's own name, e.g. "Your board". */
   label: string;
+  /**
+   * Set when something outside the grid needs to move focus into it.
+   *
+   * An id rather than a forwarded ref: the caller is a shortcut hook that only
+   * ever reads the live DOM, and an id keeps it entirely decoupled from this
+   * component's render cycle and memoization.
+   */
+  id?: string;
+  /** Answers a readout asked from the focused cell. See `boardActions.ts`. */
+  onBoardAction?: (action: BoardActionName, cellIndex: number) => void;
+  /** Jumps the player's microphone on and off, for the bare `M` key. */
+  onToggleMic?: () => void;
+  /** Setup only: fills the cells not yet chosen, for the bare `F` key. */
+  onRandomFill?: () => void;
+  /** Setup only: reverses the last board change, for the bare `U` key. */
+  onUndo?: () => void;
 }
 
 /**
@@ -224,6 +302,7 @@ export interface BoardGridProps {
 export function BoardGrid({
   cells,
   size,
+  id,
   variant = 'play',
   selectedIndex,
   completedLines,
@@ -231,8 +310,16 @@ export function BoardGrid({
   canActivate,
   cellHint,
   label,
+  onBoardAction,
+  onToggleMic,
+  onRandomFill,
+  onUndo,
 }: BoardGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
+
+  // Subscribed here, not in the cell: one subscription for the board rather
+  // than N², and the value reaches each cell as a primitive so `memo` holds.
+  const notation = useNotation();
   const [gridWidth, setGridWidth] = useState(0);
   const [rovingIndex, setRovingIndex] = useState(0);
   const hintId = `board-hint-${variant}`;
@@ -250,10 +337,31 @@ export function BoardGrid({
    * `memo` would never hit — the whole board would re-render on every
    * countdown tick. (The mobile board learned this the hard way.)
    */
+  // `BoardVariant` and `BoardStage` are the same two words; naming it `stage`
+  // here keeps the key tables readable at the call sites below.
+  const stage: BoardStage = variant;
+
+  /**
+   * What the cursor says when it lands.
+   *
+   * Behind a ref because it reads the completed-line set, which is derived
+   * further down, and because `moveFocus` must keep a stable identity — the
+   * whole board's `memo` depends on it.
+   */
+  const labelRef = useRef<(index: number) => string>(() => '');
+
   const pressRef = useRef(onCellPress);
+  const actionRef = useRef(onBoardAction);
+  const micRef = useRef(onToggleMic);
+  const fillRef = useRef(onRandomFill);
+  const undoRef = useRef(onUndo);
   const cellsRef = useRef(cells);
   useEffect(() => {
     pressRef.current = onCellPress;
+    actionRef.current = onBoardAction;
+    micRef.current = onToggleMic;
+    fillRef.current = onRandomFill;
+    undoRef.current = onUndo;
     cellsRef.current = cells;
   });
 
@@ -287,7 +395,64 @@ export function BoardGrid({
     gridRef.current
       ?.querySelector<HTMLButtonElement>(`[data-index="${clamped}"]`)
       ?.focus();
+
+    // A screen reader reads the cell it has just been handed focus on. The
+    // app's own voice gets nothing for free, so with "Speak aloud" on — and
+    // only then — the cursor says where it landed. Speaking unconditionally
+    // would talk over the screen reader and say every cell twice, which is the
+    // failure the two paths are kept apart to avoid.
+    if (isSelfVoiceEnabled()) {
+      const spoken = labelRef.current(clamped);
+      if (spoken) announcer.speak(spoken, TIER.interrupt);
+    }
   }, []);
+
+  /**
+   * The single letters, handled here rather than through `useShortcut`.
+   *
+   * They are consumed inside the grid, which is the only place they are safe:
+   * a bare `R` bound on `document` would fire while a screen-reader user was
+   * reading the page in browse mode, where `R` is their own quick-nav key.
+   * Inside a `role="grid"` both NVDA and JAWS switch to focus mode and hand
+   * every key straight to the page.
+   */
+  const handleLetter = useCallback(
+    (key: string): boolean => {
+      // Stage-filtered, so a key that belongs to the other half of the game is
+      // never swallowed here. `S` during setup falls through to the browser
+      // rather than answering with a table of zeroes.
+      const action = actionsFor(stage).find(spec => spec.key === key);
+      if (action) {
+        actionRef.current?.(action.name, activeIndex);
+        return true;
+      }
+
+      switch (key) {
+        case 'B':
+          // A fixed landmark to navigate from. The round trip in and out of
+          // the board stays on Alt+B, which is reachable from outside it.
+          moveFocus(0);
+          return true;
+        case 'M':
+          micRef.current?.();
+          return true;
+        case 'F':
+          if (stage !== 'setup') return false;
+          fillRef.current?.();
+          return true;
+        case 'U':
+          if (stage !== 'setup') return false;
+          undoRef.current?.();
+          return true;
+        case 'H':
+          announcer.speak(describeShortcuts(stage), TIER.summary);
+          return true;
+        default:
+          return false;
+      }
+    },
+    [activeIndex, moveFocus, stage],
+  );
 
   const onKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -314,16 +479,36 @@ export function BoardGrid({
         case 'End':
           next = event.ctrlKey ? size * size - 1 : row * size + (size - 1);
           break;
-        default:
+        default: {
+          // Chords belong to the browser, the screen reader, and the global
+          // bindings in `SHORTCUTS` — only the bare key is ours.
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
+          if (!handleLetter(event.key.toUpperCase())) return;
+          event.preventDefault();
           return;
+        }
       }
 
-      // At an edge there is nowhere to go — swallow the key anyway, so the
-      // arrow does not scroll the page out from under the player.
+      if (next === null) {
+        // Nowhere to go. The key is still swallowed, so the arrow does not
+        // scroll the page out from under the player — but saying nothing at
+        // all was indistinguishable from a dropped keypress, and the usual
+        // response to that is to press harder and lose your place.
+        const edge = edgeNameAt(activeIndex, size, event.key as ArrowKey);
+        if (edge) {
+          announcer.speak(edge, TIER.interrupt);
+          // No `edge_bump` clip exists yet (see docs/audio-report.md); this is
+          // the nearest cue in the registry rather than a new asset.
+          audioManager.play('board_invalid');
+        }
+        event.preventDefault();
+        return;
+      }
+
       event.preventDefault();
-      if (next !== null) moveFocus(next);
+      moveFocus(next);
     },
-    [activeIndex, size, moveFocus],
+    [activeIndex, size, moveFocus, handleLetter],
   );
 
   // Membership is looked up per cell, so flatten the lines once rather than
@@ -332,6 +517,23 @@ export function BoardGrid({
     () => new Set(completedLines?.flatMap(line => line.cells) ?? []),
     [completedLines],
   );
+
+  useEffect(() => {
+    labelRef.current = (index: number) => {
+      const cell = cellsRef.current[index];
+      if (!cell) return '';
+      return cellLabel({
+        index,
+        size,
+        value: cell.value,
+        variant,
+        marked: cell.marked,
+        selected: selectedIndex === index,
+        inCompletedLine: lineCells.has(index),
+        notation,
+      });
+    };
+  });
 
   const rows = useMemo(() => {
     const out: Cell[][] = [];
@@ -352,6 +554,7 @@ export function BoardGrid({
 
       <div
         ref={gridRef}
+        id={id}
         role="grid"
         aria-label={label}
         aria-rowcount={size}
@@ -388,6 +591,7 @@ export function BoardGrid({
                 }
                 hintId={hintId}
                 tabbable={cell.index === activeIndex}
+                notation={notation}
                 onActivate={handleActivate}
                 onFocusCell={handleFocusCell}
               />

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { announcer } from './Announcer';
+import { announcer, TIER } from './Announcer';
 
 /** Long enough for the new page to have painted before focus is moved. */
 const FOCUS_DELAY_MS = 120;
@@ -38,23 +38,33 @@ export function useAnnounceOnFocus<T extends HTMLElement = HTMLHeadingElement>({
 }: AnnounceOnFocusOptions) {
   const headingRef = useRef<T | null>(null);
   const lastAnnounced = useRef<string | null>(null);
+  const hasParkedFocus = useRef(false);
 
   useEffect(() => {
     const signature = `${title}|${detail ?? ''}|${key ?? ''}`;
-    if (lastAnnounced.current === signature) return;
-    const isFirstForThisPage = lastAnnounced.current === null;
-    lastAnnounced.current = signature;
 
-    // Assertive: arriving somewhere new outranks whatever was being said about
-    // the page we just left.
-    announcer.speak(detail ? `${title}. ${detail}` : title, { assertive: true });
+    if (lastAnnounced.current !== signature) {
+      lastAnnounced.current = signature;
+      // Assertive: arriving somewhere new outranks whatever was being said
+      // about the page we just left.
+      announcer.speak(detail ? `${title}. ${detail}` : title, TIER.interrupt);
+    }
 
-    // Only on arrival. Re-running on a `key` change would drag focus off
-    // whatever the player is currently exploring every time the server pushes
-    // an update.
-    if (!isFirstForThisPage) return;
+    // Focus is parked once per mount, and the flag is only raised when it
+    // actually happens.
+    //
+    // Tracking this separately from `lastAnnounced` matters more than it looks.
+    // The two used to be the same flag: "first run" meant "announce *and*
+    // focus". But this effect re-runs whenever `detail` changes, and its
+    // cleanup cancels the pending timer — so any re-render inside the 120 ms
+    // window killed the timer, and the re-run then saw "not first" and never
+    // scheduled another. Focus was silently never moved. React's StrictMode
+    // does exactly that on every mount in development, so in dev this hook
+    // parked focus on *no page at all*, which is how it was found.
+    if (hasParkedFocus.current) return;
 
     const timer = setTimeout(() => {
+      hasParkedFocus.current = true;
       headingRef.current?.focus({ preventScroll: false });
     }, FOCUS_DELAY_MS);
 

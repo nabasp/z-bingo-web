@@ -11,7 +11,7 @@ import type {
   Player,
   PublicPlayer,
 } from '../types';
-import { CODE_ADJECTIVES, CODE_NOUNS, ROOM_CODE_PATTERN } from '../constants';
+import { ROOM_CODE_PATTERN } from '../constants';
 
 /**
  * Adapt a server player onto the presentation shape the UI components expect,
@@ -104,16 +104,16 @@ export function completedLines(cells: Cell[], size: number): LineDescriptor[] {
   );
 }
 
-function pick<T>(items: readonly T[]): T {
-  return items[Math.floor(Math.random() * items.length)];
-}
-
-/** Generate a memorable two-word room code, e.g. "brave-otter". */
-export function generateRoomCode(): string {
-  return `${pick(CODE_ADJECTIVES)}-${pick(CODE_NOUNS)}`;
-}
-
-/** Normalize typed input to the room-code charset (lowercase letters + hyphen). */
+/**
+ * Normalize typed input to the room-code charset (lowercase letters + hyphen).
+ *
+ * There is deliberately no client-side code *generator* to go with this. Codes
+ * are issued by the server, which is the only place that can guarantee one is
+ * unique among active rooms; a local copy of the word lists was dead code whose
+ * only real effect was the risk of silently drifting out of sync with the
+ * server's. Validation stays here because it is worth catching a typo before a
+ * round trip — but the server re-validates regardless.
+ */
 export function normalizeRoomCode(input: string): string {
   return input.toLowerCase().replace(/[^a-z-]/g, '');
 }
@@ -132,6 +132,95 @@ export function generatePermutation(size: BoardSize): number[] {
     [nums[i], nums[j]] = [nums[j], nums[i]];
   }
   return nums;
+}
+
+/**
+ * The next number to place: the lowest of 1..n² not already on the board.
+ *
+ * "Lowest unused" rather than "one more than the highest" so that clearing a
+ * cell puts its number straight back into circulation. That is what makes
+ * correcting a mistake a two-step operation — clear the wrong cell, fill the
+ * right one — instead of needing an undo stack, and it is why a duplicate can
+ * never arise: the number is chosen from what is missing, not from a counter.
+ *
+ * Returns null only when the board is already full.
+ */
+export function nextAvailableNumber(cells: Cell[], size: BoardSize): number | null {
+  const used = new Set(cells.map(cell => cell.value).filter((v): v is number => v !== null));
+  for (let value = 1; value <= size * size; value++) {
+    if (!used.has(value)) return value;
+  }
+  return null;
+}
+
+/**
+ * Rearrange the numbers already placed, among the cells already holding them.
+ *
+ * Deliberately conservative: it neither invents a number nor moves an empty
+ * cell. On a half-filled board the same holes stay in the same places and only
+ * the values move, so a player who is part-way through does not lose their
+ * sense of the board's shape — which matters most to someone who cannot see it.
+ *
+ * `rng` is injectable so tests can assert the permutation rather than hope.
+ */
+export function shuffleFilledCells(
+  cells: Cell[],
+  rng: () => number = Math.random,
+): Cell[] {
+  const filled = cells
+    .map((cell, index) => ({ index, value: cell.value }))
+    .filter((entry): entry is { index: number; value: number } => entry.value !== null);
+
+  const values = filled.map(entry => entry.value);
+  for (let i = values.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [values[i], values[j]] = [values[j], values[i]];
+  }
+
+  const next = [...cells];
+  filled.forEach((entry, order) => {
+    next[entry.index] = { ...next[entry.index], value: values[order] };
+  });
+  return next;
+}
+
+/**
+ * Drop every number still missing into the cells still empty, at random.
+ *
+ * Conservative in the same way `shuffleFilledCells` is: it never moves a number
+ * the player has already placed, and never invents one. On a part-filled board
+ * it completes the arrangement around what is already there, so a player who
+ * placed the few cells they cared about keeps them exactly where they put them.
+ *
+ * This exists because laying a board out by hand is the point on a 3×3 and a
+ * chore on an 8×8 — sixty-four deliberate presses, which for a screen-reader
+ * user is sixty-four swipes as well. Filling the rest is the escape hatch, not
+ * the default: the board still starts empty.
+ *
+ * `rng` is injectable so tests can assert the arrangement rather than hope.
+ */
+export function fillRemainingCells(
+  cells: Cell[],
+  size: BoardSize,
+  rng: () => number = Math.random,
+): Cell[] {
+  const used = new Set(
+    cells.map(cell => cell.value).filter((v): v is number => v !== null),
+  );
+  const missing: number[] = [];
+  for (let value = 1; value <= size * size; value++) {
+    if (!used.has(value)) missing.push(value);
+  }
+
+  for (let i = missing.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [missing[i], missing[j]] = [missing[j], missing[i]];
+  }
+
+  let next = 0;
+  return cells.map(cell =>
+    cell.value === null ? { ...cell, value: missing[next++] ?? null } : cell,
+  );
 }
 
 /** An empty board of `size²` cells. */
@@ -163,12 +252,19 @@ export function chunk<T>(items: T[], size: number): T[][] {
   return rows;
 }
 
-/** Up-to-two-letter uppercase initials from a name. */
+/**
+ * Up-to-two-letter uppercase initials from a name.
+ *
+ * Split by code point, not by UTF-16 unit: `charAt(0)` on a name beginning with
+ * an emoji or any astral character returns half a surrogate pair, which renders
+ * as a replacement glyph. The bot is named "\u{1F916} Bot", which is how this
+ * surfaced, but it was always wrong for any player whose name starts that way.
+ */
 export function initials(name: string): string {
   return name
     .trim()
     .split(/\s+/)
     .slice(0, 2)
-    .map(part => part.charAt(0).toUpperCase())
+    .map(part => [...part][0]?.toUpperCase() ?? '')
     .join('');
 }
